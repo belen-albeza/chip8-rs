@@ -1,4 +1,5 @@
 use crate::error::CPUError;
+use crate::instruction::Instruction;
 
 pub type Result<T> = std::result::Result<T, CPUError>;
 
@@ -27,11 +28,42 @@ impl CPU {
         self.memory[MEM_START..(MEM_START + rom.len())].copy_from_slice(rom);
         Ok(())
     }
+
+    pub fn tick(&mut self) -> Result<()> {
+        let opcode = (self.read_byte()? as u16) << 8 | self.read_byte()? as u16;
+        let instruction = Instruction::try_from(opcode)?;
+
+        match instruction {
+            Instruction::Jump(addr) => self.exec_jump(addr)?,
+        }
+
+        Ok(())
+    }
+
+    fn read_byte(&mut self) -> Result<u8> {
+        let value = self
+            .memory
+            .get(self.pc as usize)
+            .ok_or(CPUError::InvalidAddress(self.pc))?;
+        self.pc += 1;
+        Ok(*value)
+    }
+
+    fn exec_jump(&mut self, to: u16) -> Result<()> {
+        self.pc = to;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn any_cpu_with_rom(rom: &[u8]) -> CPU {
+        let mut cpu = CPU::new();
+        cpu.load_rom(rom).expect("Couldn't load ROM");
+        cpu
+    }
 
     #[test]
     fn test_new() {
@@ -61,5 +93,33 @@ mod tests {
         let res = cpu.load_rom(&rom);
 
         assert_eq!(res.unwrap_err(), CPUError::MemoryOverflow);
+    }
+
+    #[test]
+    fn test_tick_returns_err_on_invalid_opcode() {
+        let mut cpu = any_cpu_with_rom(&[0xFF, 0xFF]);
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap_err(), CPUError::InvalidOpcode(0xFFFF));
+    }
+
+    #[test]
+    fn test_tick_returns_err_if_invalid_pc() {
+        let mut cpu = any_cpu_with_rom(&[]);
+        cpu.pc = 0x1000;
+
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
+    }
+
+    #[test]
+    fn test_exec_jump() {
+        let mut cpu = any_cpu_with_rom(&[0x13, 0x21]);
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0321);
     }
 }
