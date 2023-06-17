@@ -6,6 +6,8 @@ pub enum Instruction {
     Jump(u16),
     // 6xkk -> Vx = kk
     LoadVx(u8, u8),
+    // 7xkk -> Vx += kk
+    AddVx(u8, u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -25,6 +27,7 @@ impl TryFrom<u16> for Instruction {
         match nibbles {
             (0x1, _, _, _) => Ok(Self::Jump(nnn)),
             (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
+            (0x7, x, _, _) => Ok(Self::AddVx(x, kk)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -47,5 +50,9 @@ mod tests {
             Instruction::try_from(0x6122),
             Ok(Instruction::LoadVx(0x1, 0x22))
         );
+        assert_eq!(
+            Instruction::try_from(0x73FF),
+            Ok(Instruction::AddVx(0x3, 0xFF))
+        )
     }
 }

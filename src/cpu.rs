@@ -39,6 +39,7 @@ impl CPU {
         match instruction {
             Instruction::Jump(addr) => self.exec_jump(addr)?,
             Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
+            Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
         }
 
         Ok(())
@@ -64,6 +65,16 @@ impl CPU {
             .get_mut(x as usize)
             .ok_or(CPUError::InvalidVRegister(x))?;
         *i = value;
+
+        Ok(())
+    }
+
+    fn exec_add_vx(&mut self, x: u8, value: u8) -> Result<()> {
+        let i = self
+            .v_registers
+            .get_mut(x as usize)
+            .ok_or(CPUError::InvalidVRegister(x))?;
+        *i += value;
 
         Ok(())
     }
@@ -147,5 +158,17 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0202);
         assert_eq!(cpu.v_registers[0xA], 0x8F);
+    }
+
+    #[test]
+    fn test_add_vx() {
+        let mut cpu = any_cpu_with_rom(&[0x7A, 0x8F]);
+        cpu.v_registers[0xA] = 0x1;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0202);
+        assert_eq!(cpu.v_registers[0xA], 0x90);
     }
 }
