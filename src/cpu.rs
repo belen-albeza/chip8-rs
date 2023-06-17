@@ -47,6 +47,8 @@ impl CPU {
             Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
             Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
+            Instruction::ClearScreen => self.exec_clear_screen()?,
+            Instruction::DrawSprite(_, _, _) => todo!("unimplemented"),
         }
 
         Ok(())
@@ -92,6 +94,11 @@ impl CPU {
 
     fn exec_load_i(&mut self, value: u16) -> Result<()> {
         self.i_register = value;
+        Ok(())
+    }
+
+    fn exec_clear_screen(&mut self) -> Result<()> {
+        self.v_buffer.fill(false);
         Ok(())
     }
 }
@@ -198,5 +205,17 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0202);
         assert_eq!(cpu.i_register, 0x123);
+    }
+
+    #[test]
+    fn test_clear_screen() {
+        let mut cpu = any_cpu_with_rom(&[0x00, 0xe0]);
+        cpu.v_buffer = [true; SCREEN_WIDTH * SCREEN_HEIGHT];
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0202);
+        assert_eq!(cpu.v_buffer, [false; SCREEN_WIDTH * SCREEN_HEIGHT]);
     }
 }
