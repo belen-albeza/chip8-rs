@@ -74,6 +74,7 @@ impl From<UpdateTextureError> for Error {
 #[derive(Debug, PartialEq)]
 pub enum CPUError {
     MemoryOverflow,
+    StackOverflow,
     InvalidOpcode(u16),
     InvalidAddress(u16),
     InvalidVRegister(u8),
@@ -83,6 +84,7 @@ impl fmt::Display for CPUError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MemoryOverflow => write!(f, "Memory overflow"),
+            Self::StackOverflow => write!(f, "Stack overflow"),
             Self::InvalidOpcode(op) => write!(f, "Invalid opcode: {:#04X}", op),
             Self::InvalidAddress(addr) => write!(f, "Invalid memory address: {:#04X}", addr),
             Self::InvalidVRegister(i) => write!(f, "Invalid V-Register: {:#01X}", i),
