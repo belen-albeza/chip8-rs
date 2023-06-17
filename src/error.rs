@@ -1,4 +1,7 @@
 use core::fmt;
+use sdl2::render::{TextureValueError, UpdateTextureError};
+use sdl2::video::WindowBuildError;
+use sdl2::IntegerOrSdlError;
 use std::error;
 use std::error::Error as ErrorTrait;
 use std::io;
@@ -7,11 +10,13 @@ use std::io;
 pub enum Error {
     IOError(io::Error),
     RuntimeError(CPUError),
+    SystemError(String),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::SystemError(msg) => write!(f, "{}", msg),
             _ => match self.source() {
                 Some(err) => write!(f, "{}", err),
                 None => write!(f, "{:?}", self),
@@ -25,6 +30,7 @@ impl error::Error for Error {
         match self {
             Self::IOError(ref e) => Some(e),
             Self::RuntimeError(ref e) => Some(e),
+            _ => None,
         }
     }
 }
@@ -38,6 +44,30 @@ impl From<io::Error> for Error {
 impl From<CPUError> for Error {
     fn from(err: CPUError) -> Error {
         Error::RuntimeError(err)
+    }
+}
+
+impl From<WindowBuildError> for Error {
+    fn from(err: WindowBuildError) -> Error {
+        Error::SystemError(format!("{}", err))
+    }
+}
+
+impl From<IntegerOrSdlError> for Error {
+    fn from(err: IntegerOrSdlError) -> Error {
+        Error::SystemError(format!("{}", err))
+    }
+}
+
+impl From<TextureValueError> for Error {
+    fn from(err: TextureValueError) -> Error {
+        Error::SystemError(format!("{}", err))
+    }
+}
+
+impl From<UpdateTextureError> for Error {
+    fn from(err: UpdateTextureError) -> Error {
+        Error::SystemError(format!("{}", err))
     }
 }
 

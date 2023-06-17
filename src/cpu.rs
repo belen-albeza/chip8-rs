@@ -6,6 +6,8 @@ pub type Result<T> = std::result::Result<T, CPUError>;
 const MEM_SIZE: usize = 4096;
 const MEM_START: usize = 0x200;
 const V_REGISTERS_SIZE: usize = 16;
+const SCREEN_WIDTH: usize = 64;
+const SCREEN_HEIGHT: usize = 32;
 
 #[allow(dead_code)]
 pub struct CPU {
@@ -13,6 +15,7 @@ pub struct CPU {
     pc: u16,
     v_registers: [u8; V_REGISTERS_SIZE],
     i_register: u16,
+    v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
 }
 
 impl CPU {
@@ -22,6 +25,7 @@ impl CPU {
             pc: 0x200,
             v_registers: [0; V_REGISTERS_SIZE],
             i_register: 0,
+            v_buffer: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
         }
     }
 
