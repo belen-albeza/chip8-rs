@@ -1,3 +1,7 @@
+use crate::error::CPUError;
+
+type Result<T> = std::result::Result<T, CPUError>;
+
 pub fn draw(
     sprite: &[u8],
     x: usize,
@@ -24,4 +28,14 @@ pub fn draw(
     }
 
     did_collide
+}
+
+pub fn read_sprite(addr: usize, size: usize, memory: &[u8]) -> Result<&[u8]> {
+    if (addr + size - 1) >= memory.len() {
+        return Err(CPUError::InvalidAddress((addr + size - 1) as u16));
+    }
+
+    let sprite = &memory[addr..addr + size];
+
+    Ok(sprite)
 }

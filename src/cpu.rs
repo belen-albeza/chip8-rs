@@ -123,16 +123,11 @@ impl CPU {
     }
 
     fn exec_draw_sprite(&mut self, vx: u8, vy: u8, n: u8) -> Result<()> {
-        let sprite_addr = self.i_register as usize;
-        let size = n as usize;
-        if (sprite_addr + size - 1) >= self.memory.len() {
-            return Err(CPUError::InvalidAddress((sprite_addr + size - 1) as u16));
-        }
+        let sprite = sprites::read_sprite(self.i_register as usize, n as usize, &self.memory)?;
 
         let x = self.read_register(vx)?;
         let y = self.read_register(vy)?;
 
-        let sprite = &self.memory[sprite_addr..sprite_addr + size];
         let did_collide = sprites::draw(
             sprite,
             x as usize,
