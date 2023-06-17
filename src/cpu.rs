@@ -11,14 +11,17 @@ const MEM_START: usize = 0x200;
 const V_REGISTERS_SIZE: usize = 16;
 const SCREEN_WIDTH: usize = 64;
 const SCREEN_HEIGHT: usize = 32;
+const STACK_SIZE: usize = 16;
 
 #[allow(dead_code)]
 pub struct CPU {
     memory: [u8; MEM_SIZE],
     pc: u16,
+    sp: usize,
     v_registers: [u8; V_REGISTERS_SIZE],
     i_register: u16,
-    pub v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
+    v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
+    stack: [u16; STACK_SIZE],
 }
 
 impl CPU {
@@ -26,9 +29,11 @@ impl CPU {
         Self {
             memory: [0; MEM_SIZE],
             pc: 0x200,
+            sp: 0,
             v_registers: [0; V_REGISTERS_SIZE],
             i_register: 0,
             v_buffer: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
+            stack: [0; STACK_SIZE],
         }
     }
 
@@ -48,6 +53,7 @@ impl CPU {
         match instruction {
             Instruction::ClearScreen => self.exec_clear_screen()?,
             Instruction::Jump(addr) => self.exec_jump(addr)?,
+            Instruction::Call(addr) => self.exec_call(addr)?,
             Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
             Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
             Instruction::Set(x, y) => self.exec_set(x, y)?,
@@ -95,12 +101,27 @@ impl CPU {
         Ok(())
     }
 
+    fn push_stack(&mut self, value: u16) -> Result<()> {
+        let i = self.stack.get_mut(self.sp).ok_or(CPUError::StackOverflow)?;
+        *i = value;
+
+        self.sp += 1;
+
+        Ok(())
+    }
+
     fn exec_clear_screen(&mut self) -> Result<()> {
         self.v_buffer.fill(false);
         Ok(())
     }
 
     fn exec_jump(&mut self, to: u16) -> Result<()> {
+        self.pc = to;
+        Ok(())
+    }
+
+    fn exec_call(&mut self, to: u16) -> Result<()> {
+        self.push_stack(self.pc)?;
         self.pc = to;
         Ok(())
     }
@@ -247,6 +268,8 @@ mod tests {
         assert_eq!(cpu.pc, 0x200);
         assert_eq!(cpu.v_registers, [0; 16]);
         assert_eq!(cpu.i_register, 0);
+        assert_eq!(cpu.sp, 0);
+        assert_eq!(cpu.stack, [0; 16]);
     }
 
     #[test]
@@ -303,13 +326,35 @@ mod tests {
     }
 
     #[test]
-    fn test_exec_jump() {
+    fn test_jump() {
         let mut cpu = any_cpu_with_rom(&[0x13, 0x21]);
 
         let res = cpu.tick();
 
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0321);
+    }
+
+    #[test]
+    fn test_call() {
+        let mut cpu = any_cpu_with_rom(&[0x23, 0x21]);
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0321);
+        assert_eq!(cpu.stack[0], 0x202);
+        assert_eq!(cpu.sp, 1);
+    }
+
+    #[test]
+    fn test_call_stack_overflow() {
+        let mut cpu = any_cpu_with_rom(&[0x23, 0x21]);
+        cpu.sp = 16;
+
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap_err(), CPUError::StackOverflow);
     }
 
     #[test]

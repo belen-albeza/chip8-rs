@@ -6,6 +6,8 @@ pub enum Instruction {
     ClearScreen,
     // 1nnn -> PC = nnn
     Jump(u16),
+    // 2nnn -> Stack[SP] = PC; SP += 1; PC = nnn
+    Call(u16),
     // 6xkk -> Vx = kk
     LoadVx(u8, u8),
     // 7xkk -> Vx += kk
@@ -51,6 +53,7 @@ impl TryFrom<u16> for Instruction {
         match nibbles {
             (0x0, 0x0, 0xe, 0x0) => Ok(Self::ClearScreen),
             (0x1, _, _, _) => Ok(Self::Jump(nnn)),
+            (0x2, _, _, _) => Ok(Self::Call(nnn)),
             (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
             (0x7, x, _, _) => Ok(Self::AddVx(x, kk)),
             (0x8, x, y, 0x0) => Ok(Self::Set(x, y)),
@@ -83,6 +86,7 @@ mod tests {
     fn test_try_from_valid_opcodes() {
         assert_eq!(Instruction::try_from(0x00E0), Ok(Instruction::ClearScreen));
         assert_eq!(Instruction::try_from(0x1123), Ok(Instruction::Jump(0x123)));
+        assert_eq!(Instruction::try_from(0x2123), Ok(Instruction::Call(0x123)));
         assert_eq!(
             Instruction::try_from(0x6122),
             Ok(Instruction::LoadVx(0x1, 0x22))
