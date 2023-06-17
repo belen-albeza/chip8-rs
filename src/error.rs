@@ -52,8 +52,8 @@ impl fmt::Display for CPUError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MemoryOverflow => write!(f, "Memory overflow"),
-            Self::InvalidOpcode(op) => write!(f, "Invalid opcode: {:#04x}", op),
-            Self::InvalidAddress(addr) => write!(f, "Invalid memory address: {:#04x}", addr),
+            Self::InvalidOpcode(op) => write!(f, "Invalid opcode: {:#04X}", op),
+            Self::InvalidAddress(addr) => write!(f, "Invalid memory address: {:#04X}", addr),
         }
     }
 }
