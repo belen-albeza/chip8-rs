@@ -51,6 +51,7 @@ impl CPU {
         let instruction = Instruction::try_from(opcode)?;
 
         match instruction {
+            Instruction::NoOp => {}
             Instruction::ClearScreen => self.exec_clear_screen()?,
             Instruction::Return => self.exec_return()?,
             Instruction::Jump(addr) => self.exec_jump(addr)?,
@@ -329,6 +330,16 @@ mod tests {
         let res = cpu.tick();
 
         assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
+    }
+
+    #[test]
+    fn test_noop() {
+        let mut cpu = any_cpu_with_rom(&[0x01, 0x23]);
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0202);
     }
 
     #[test]
