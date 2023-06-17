@@ -15,7 +15,7 @@ pub struct CPU {
     pc: u16,
     v_registers: [u8; V_REGISTERS_SIZE],
     i_register: u16,
-    v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
+    pub v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
 }
 
 impl CPU {
@@ -50,6 +50,10 @@ impl CPU {
         }
 
         Ok(())
+    }
+
+    pub fn visual_buffer(&self) -> &[bool; SCREEN_WIDTH * SCREEN_HEIGHT] {
+        &self.v_buffer
     }
 
     fn read_byte(&mut self) -> Result<u8> {
