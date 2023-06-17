@@ -2,6 +2,8 @@ use crate::error::CPUError;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Instruction {
+    // 00e0 -> clear screen
+    ClearScreen,
     // 1nnn -> PC = nnn
     Jump(u16),
     // 6xkk -> Vx = kk
@@ -10,6 +12,8 @@ pub enum Instruction {
     AddVx(u8, u8),
     // Annn -> I = nnn
     LoadI(u16),
+    // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy). VF=collision
+    DrawSprite(u8, u8, u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -27,10 +31,12 @@ impl TryFrom<u16> for Instruction {
         let kk = (value & 0x00FF) as u8;
 
         match nibbles {
+            (0x0, 0x0, 0xe, 0x0) => Ok(Self::ClearScreen),
             (0x1, _, _, _) => Ok(Self::Jump(nnn)),
             (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
             (0x7, x, _, _) => Ok(Self::AddVx(x, kk)),
             (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
+            (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -58,5 +64,10 @@ mod tests {
             Ok(Instruction::AddVx(0x3, 0xFF))
         );
         assert_eq!(Instruction::try_from(0xABCD), Ok(Instruction::LoadI(0xBCD)));
+        assert_eq!(Instruction::try_from(0x00E0), Ok(Instruction::ClearScreen));
+        assert_eq!(
+            Instruction::try_from(0xD12A),
+            Ok(Instruction::DrawSprite(0x1, 0x2, 0xA))
+        );
     }
 }
