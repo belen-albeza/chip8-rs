@@ -116,13 +116,15 @@ impl CPU {
         let y = self.read_register(vy)?;
 
         let sprite = &self.memory[sprite_addr..sprite_addr + size];
-        sprites::draw(
+        let did_collide = sprites::draw(
             sprite,
             x as usize,
             y as usize,
             (SCREEN_WIDTH, SCREEN_HEIGHT),
             &mut self.v_buffer,
         );
+
+        self.v_registers[0xF] = if did_collide { 1 } else { 0 };
 
         Ok(())
     }
@@ -289,5 +291,50 @@ mod tests {
         assert_eq!(cpu.v_buffer[i + 64..(i + 64 + 8)], [false; 8]);
         assert_eq!(cpu.v_buffer[i + 128..(i + 128 + 8)], [true; 8]);
         assert_eq!(cpu.v_registers[0xF], 0);
+    }
+
+    #[test]
+    fn test_draw_sprite_wraps() {
+        let mut cpu = any_cpu_with_rom(&[0xD0, 0x13]);
+        cpu.i_register = 0x300;
+        cpu.v_registers[0] = 60;
+        cpu.v_registers[1] = 30;
+        cpu.memory[0x300] = 0xFF;
+        cpu.memory[0x301] = 0x00;
+        cpu.memory[0x302] = 0xFF;
+
+        let res = cpu.tick();
+
+        let mut i = (30 * SCREEN_WIDTH) + 60;
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0202);
+        assert_eq!(cpu.v_buffer[i..(i + 4)], [true; 4]);
+        assert_eq!(cpu.v_buffer[i - 60..(i - 60 + 4)], [true; 4]);
+        i = (30 * SCREEN_WIDTH) + 64;
+        assert_eq!(cpu.v_buffer[i..(i + 4)], [false; 4]);
+        assert_eq!(cpu.v_buffer[i - 60..(i - 60 + 4)], [false; 4]);
+        i = 60;
+        assert_eq!(cpu.v_buffer[i..(i + 4)], [true; 4]);
+        assert_eq!(cpu.v_buffer[i - 60..(i - 60 + 4)], [true; 4]);
+        assert_eq!(cpu.v_registers[0xF], 0);
+    }
+
+    #[test]
+    fn test_draw_sprite_with_collision() {
+        let mut cpu = any_cpu_with_rom(&[0xD0, 0x11]);
+        cpu.i_register = 0x300;
+        cpu.v_registers[0] = 0;
+        cpu.v_registers[1] = 0;
+        cpu.memory[0x300] = 0xFF;
+        cpu.v_buffer[0..8].copy_from_slice(&[false, false, false, false, true, true, true, true]);
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(
+            cpu.v_buffer[0..8],
+            [true, true, true, true, false, false, false, false]
+        );
+        assert_eq!(cpu.v_registers[0xF], 1);
     }
 }

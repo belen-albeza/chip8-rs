@@ -6,7 +6,7 @@ pub fn draw(
     buffer: &mut [bool],
 ) -> bool {
     let x = x % bounds.0;
-    let did_collide = false;
+    let mut did_collide = false;
 
     for row in 0..sprite.len() {
         let y = (y + row) % bounds.1;
@@ -17,6 +17,7 @@ pub fn draw(
 
             let index = y * bounds.0 + x;
 
+            did_collide |= buffer[index] & pixel;
             // XOR existing screen pixel with sprite pixel to draw
             buffer[index] ^= pixel;
         }
