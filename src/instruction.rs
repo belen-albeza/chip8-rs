@@ -14,6 +14,8 @@ pub enum Instruction {
     Set(u8, u8),
     // 8xy1 -> Vx = Vx OR Vy
     Or(u8, u8),
+    // 8xy2 -> Vx = Vx AND Vy
+    And(u8, u8),
     // Annn -> I = nnn
     LoadI(u16),
     // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy). VF=collision
@@ -41,6 +43,7 @@ impl TryFrom<u16> for Instruction {
             (0x7, x, _, _) => Ok(Self::AddVx(x, kk)),
             (0x8, x, y, 0x0) => Ok(Self::Set(x, y)),
             (0x8, x, y, 0x1) => Ok(Self::Or(x, y)),
+            (0x8, x, y, 0x2) => Ok(Self::And(x, y)),
             (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             _ => Err(CPUError::InvalidOpcode(value)),
@@ -75,6 +78,10 @@ mod tests {
             Ok(Instruction::Set(0x1, 0x2))
         );
         assert_eq!(Instruction::try_from(0x8AB1), Ok(Instruction::Or(0xA, 0xB)));
+        assert_eq!(
+            Instruction::try_from(0x8AB2),
+            Ok(Instruction::And(0xA, 0xB))
+        );
         assert_eq!(Instruction::try_from(0xABCD), Ok(Instruction::LoadI(0xBCD)));
         assert_eq!(
             Instruction::try_from(0xD12A),
