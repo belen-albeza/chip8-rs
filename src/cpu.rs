@@ -56,6 +56,7 @@ impl CPU {
             Instruction::Xor(x, y) => self.exec_xor(x, y)?,
             Instruction::Add(x, y) => self.exec_add(x, y)?,
             Instruction::Sub(x, y) => self.exec_sub(x, y)?,
+            Instruction::SubN(x, y) => self.exec_subn(x, y)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
@@ -153,6 +154,15 @@ impl CPU {
         let (value, carry) = self
             .read_register(x)?
             .overflowing_sub(self.read_register(y)?);
+        self.set_register(x, value)?;
+        self.set_register(0xF, !carry as u8)?;
+        Ok(())
+    }
+
+    fn exec_subn(&mut self, x: u8, y: u8) -> Result<()> {
+        let (value, carry) = self
+            .read_register(y)?
+            .overflowing_sub(self.read_register(x)?);
         self.set_register(x, value)?;
         self.set_register(0xF, !carry as u8)?;
         Ok(())
@@ -419,6 +429,36 @@ mod tests {
         assert_eq!(cpu.pc, 0x202);
         assert_eq!(cpu.v_registers[0x0], 0xFF);
         assert_eq!(cpu.v_registers[0x1], 0xF1);
+        assert_eq!(cpu.v_registers[0xF], 0x0);
+    }
+
+    #[test]
+    fn test_subn() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x17]);
+        cpu.v_registers[0x0] = 0x11;
+        cpu.v_registers[0x1] = 0xF0;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0xDF);
+        assert_eq!(cpu.v_registers[0x1], 0xF0);
+        assert_eq!(cpu.v_registers[0xF], 0x1);
+    }
+
+    #[test]
+    fn test_subn_overflow() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x17]);
+        cpu.v_registers[0x0] = 0xF1;
+        cpu.v_registers[0x1] = 0xF0;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0xFF);
+        assert_eq!(cpu.v_registers[0x1], 0xF0);
         assert_eq!(cpu.v_registers[0xF], 0x0);
     }
 

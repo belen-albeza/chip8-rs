@@ -22,6 +22,8 @@ pub enum Instruction {
     Add(u8, u8),
     // 8xy5 -> Vx = Vx - Vy; VF = NOT borrow
     Sub(u8, u8),
+    // 8xy7 -> Vx = Vy - Vy; VF = NOT borrow
+    SubN(u8, u8),
     // Annn -> I = nnn
     LoadI(u16),
     // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy); VF = collision
@@ -53,6 +55,7 @@ impl TryFrom<u16> for Instruction {
             (0x8, x, y, 0x3) => Ok(Self::Xor(x, y)),
             (0x8, x, y, 0x4) => Ok(Self::Add(x, y)),
             (0x8, x, y, 0x5) => Ok(Self::Sub(x, y)),
+            (0x8, x, y, 0x7) => Ok(Self::SubN(x, y)),
             (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             _ => Err(CPUError::InvalidOpcode(value)),
@@ -102,6 +105,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8AB5),
             Ok(Instruction::Sub(0xA, 0xB))
+        );
+        assert_eq!(
+            Instruction::try_from(0x8AB7),
+            Ok(Instruction::SubN(0xA, 0xB))
         );
         assert_eq!(Instruction::try_from(0xABCD), Ok(Instruction::LoadI(0xBCD)));
         assert_eq!(
