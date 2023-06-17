@@ -58,6 +58,7 @@ impl CPU {
             Instruction::Sub(x, y) => self.exec_sub(x, y)?,
             Instruction::ShiftRightVx(x) => self.exec_shiftr_vx(x)?,
             Instruction::SubN(x, y) => self.exec_subn(x, y)?,
+            Instruction::ShiftLeftVx(x) => self.exec_shiftl_vx(x)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
@@ -174,6 +175,14 @@ impl CPU {
             .overflowing_sub(self.read_register(x)?);
         self.set_register(x, value)?;
         self.set_register(0xF, !carry as u8)?;
+        Ok(())
+    }
+
+    fn exec_shiftl_vx(&mut self, x: u8) -> Result<()> {
+        let value = self.read_register(x)?;
+        let shifted_out = (value & 0b_1000_0000) >> 7;
+        self.set_register(x, value << 1)?;
+        self.set_register(0xF, shifted_out)?;
         Ok(())
     }
 
@@ -495,6 +504,32 @@ mod tests {
         assert_eq!(cpu.v_registers[0x0], 0xFF);
         assert_eq!(cpu.v_registers[0x1], 0xF0);
         assert_eq!(cpu.v_registers[0xF], 0x0);
+    }
+
+    #[test]
+    fn test_shift_left_vx() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x1E]);
+        cpu.v_registers[0x0] = 0b_0100_1110;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0b_1001_1100);
+        assert_eq!(cpu.v_registers[0xF], 0x0);
+    }
+
+    #[test]
+    fn test_shift_left_vx_with_shifted_out_bit() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x1E]);
+        cpu.v_registers[0x0] = 0b_1100_1111;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0b_1001_1110);
+        assert_eq!(cpu.v_registers[0xF], 0x01);
     }
 
     #[test]
