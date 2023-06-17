@@ -2,7 +2,10 @@ use crate::error::CPUError;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Instruction {
-    Jump(u16), // 1nnn
+    // 1nnn -> Jump to address nnnn
+    Jump(u16),
+    // 6xkk -> Vx = kk
+    LoadVx(u8, u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -17,9 +20,11 @@ impl TryFrom<u16> for Instruction {
         );
 
         let nnn = (value & 0x0FFF) as u16;
+        let kk = (value & 0x00FF) as u8;
 
         match nibbles {
             (0x1, _, _, _) => Ok(Self::Jump(nnn)),
+            (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -37,6 +42,10 @@ mod tests {
 
     #[test]
     fn test_try_from_valid_opcodes() {
-        assert_eq!(Instruction::try_from(0x1123), Ok(Instruction::Jump(0x123)))
+        assert_eq!(Instruction::try_from(0x1123), Ok(Instruction::Jump(0x123)));
+        assert_eq!(
+            Instruction::try_from(0x6122),
+            Ok(Instruction::LoadVx(0x1, 0x22))
+        );
     }
 }

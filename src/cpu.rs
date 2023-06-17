@@ -5,11 +5,13 @@ pub type Result<T> = std::result::Result<T, CPUError>;
 
 const MEM_SIZE: usize = 4096;
 const MEM_START: usize = 0x200;
+const V_REGISTERS_SIZE: usize = 16;
 
+#[allow(dead_code)]
 pub struct CPU {
     memory: [u8; MEM_SIZE],
-    #[allow(dead_code)]
     pc: u16,
+    v_registers: [u8; V_REGISTERS_SIZE],
 }
 
 impl CPU {
@@ -17,6 +19,7 @@ impl CPU {
         Self {
             memory: [0; MEM_SIZE],
             pc: 0x200,
+            v_registers: [0; V_REGISTERS_SIZE],
         }
     }
 
@@ -35,6 +38,7 @@ impl CPU {
 
         match instruction {
             Instruction::Jump(addr) => self.exec_jump(addr)?,
+            Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
         }
 
         Ok(())
@@ -51,6 +55,16 @@ impl CPU {
 
     fn exec_jump(&mut self, to: u16) -> Result<()> {
         self.pc = to;
+        Ok(())
+    }
+
+    fn exec_load_vx(&mut self, x: u8, value: u8) -> Result<()> {
+        let i = self
+            .v_registers
+            .get_mut(x as usize)
+            .ok_or(CPUError::InvalidVRegister(x))?;
+        *i = value;
+
         Ok(())
     }
 }
@@ -70,6 +84,7 @@ mod tests {
         let cpu = CPU::new();
         assert_eq!(cpu.memory, [0; 4096]);
         assert_eq!(cpu.pc, 0x200);
+        assert_eq!(cpu.v_registers, [0; 16]);
     }
 
     #[test]
@@ -121,5 +136,16 @@ mod tests {
 
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0321);
+    }
+
+    #[test]
+    fn test_load_vx() {
+        let mut cpu = any_cpu_with_rom(&[0x6A, 0x8F]);
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0202);
+        assert_eq!(cpu.v_registers[0xA], 0x8F);
     }
 }
