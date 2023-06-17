@@ -14,5 +14,11 @@ struct CliArgs {
 
 fn main() {
     let cli = Cli::parse();
-    chip8_rs::run(cli.run.file)
+    match chip8_rs::run(cli.run.file) {
+        Ok(()) => {}
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(exitcode::DATAERR)
+        }
+    }
 }
