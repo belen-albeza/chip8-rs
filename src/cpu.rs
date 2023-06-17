@@ -51,6 +51,7 @@ impl CPU {
             Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
             Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
             Instruction::Set(x, y) => self.exec_set(x, y)?,
+            Instruction::Or(x, y) => self.exec_or(x, y)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
@@ -113,6 +114,12 @@ impl CPU {
 
     fn exec_set(&mut self, x: u8, y: u8) -> Result<()> {
         let value = self.read_register(y)?;
+        self.set_register(x, value)?;
+        Ok(())
+    }
+
+    fn exec_or(&mut self, x: u8, y: u8) -> Result<()> {
+        let value = self.read_register(x)? | self.read_register(y)?;
         self.set_register(x, value)?;
         Ok(())
     }
@@ -276,6 +283,21 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x202);
         assert_eq!(cpu.v_registers[0x0], 0xA);
+        assert_eq!(cpu.v_registers[0x1], 0xA);
+    }
+
+    #[test]
+    fn test_or() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x11]);
+        cpu.v_registers[0x0] = 0b_0001_1111;
+        cpu.v_registers[0x1] = 0b_0110_1111;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0b_0111_1111);
+        assert_eq!(cpu.v_registers[0x1], 0b_0110_1111);
     }
 
     #[test]
