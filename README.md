@@ -6,16 +6,16 @@ CHIP-8 emulator in Rust
 
 Standard CHIP-8 instructions:
 
-- [ ] 0nnn - SYS addr
+- [x] 0nnn - SYS addr
 - [ ] 00E0 - CLS
 - [ ] 00EE - RET
-- [ ] 1nnn - JP addr
+- [x] 1nnn - JP addr
 - [ ] 2nnn - CALL addr
 - [ ] 3xkk - SE Vx, byte
 - [ ] 4xkk - SNE Vx, byte
 - [ ] 5xy0 - SE Vx, Vy
-- [ ] 6xkk - LD Vx, byte
-- [ ] 7xkk - ADD Vx, byte
+- [x] 6xkk - LD Vx, byte
+- [x] 7xkk - ADD Vx, byte
 - [ ] 8xy0 - LD Vx, Vy
 - [ ] 8xy1 - OR Vx, Vy
 - [ ] 8xy2 - AND Vx, Vy
@@ -26,7 +26,7 @@ Standard CHIP-8 instructions:
 - [ ] 8xy7 - SUBN Vx, Vy
 - [ ] 8xyE - SHL Vx {, Vy}
 - [ ] 9xy0 - SNE Vx, Vy
-- [ ] Annn - LD I, addr
+- [x] Annn - LD I, addr
 - [ ] Bnnn - JP V0, addr
 - [ ] Cxkk - RND Vx, byte
 - [ ] Dxyn - DRW Vx, Vy, nibble
