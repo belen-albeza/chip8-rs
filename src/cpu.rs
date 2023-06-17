@@ -52,6 +52,7 @@ impl CPU {
 
         match instruction {
             Instruction::ClearScreen => self.exec_clear_screen()?,
+            Instruction::Return => self.exec_return()?,
             Instruction::Jump(addr) => self.exec_jump(addr)?,
             Instruction::Call(addr) => self.exec_call(addr)?,
             Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
@@ -110,8 +111,25 @@ impl CPU {
         Ok(())
     }
 
+    fn pop_stack(&mut self) -> Result<u16> {
+        let value = self
+            .stack
+            .get(self.sp - 1)
+            .ok_or(CPUError::StackOverflow)
+            .copied()?;
+
+        self.sp -= 1;
+        Ok(value)
+    }
+
     fn exec_clear_screen(&mut self) -> Result<()> {
         self.v_buffer.fill(false);
+        Ok(())
+    }
+
+    fn exec_return(&mut self) -> Result<()> {
+        let to = self.pop_stack()?;
+        self.pc = to;
         Ok(())
     }
 
@@ -323,6 +341,19 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0202);
         assert_eq!(cpu.v_buffer, [false; SCREEN_WIDTH * SCREEN_HEIGHT]);
+    }
+
+    #[test]
+    fn test_return() {
+        let mut cpu = any_cpu_with_rom(&[0x00, 0xee]);
+        cpu.stack[0] = 0x300;
+        cpu.sp = 1;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.sp, 0);
+        assert_eq!(cpu.pc, 0x300);
     }
 
     #[test]

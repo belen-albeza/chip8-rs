@@ -4,6 +4,8 @@ use crate::error::CPUError;
 pub enum Instruction {
     // 00e0 -> clear screen
     ClearScreen,
+    // 00ee -> SP -=1; PC = Stack[SP];
+    Return,
     // 1nnn -> PC = nnn
     Jump(u16),
     // 2nnn -> Stack[SP] = PC; SP += 1; PC = nnn
@@ -52,6 +54,7 @@ impl TryFrom<u16> for Instruction {
 
         match nibbles {
             (0x0, 0x0, 0xe, 0x0) => Ok(Self::ClearScreen),
+            (0x0, 0x0, 0xe, 0xe) => Ok(Self::Return),
             (0x1, _, _, _) => Ok(Self::Jump(nnn)),
             (0x2, _, _, _) => Ok(Self::Call(nnn)),
             (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
@@ -85,6 +88,7 @@ mod tests {
     #[test]
     fn test_try_from_valid_opcodes() {
         assert_eq!(Instruction::try_from(0x00E0), Ok(Instruction::ClearScreen));
+        assert_eq!(Instruction::try_from(0x00EE), Ok(Instruction::Return));
         assert_eq!(Instruction::try_from(0x1123), Ok(Instruction::Jump(0x123)));
         assert_eq!(Instruction::try_from(0x2123), Ok(Instruction::Call(0x123)));
         assert_eq!(
