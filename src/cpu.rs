@@ -52,8 +52,10 @@ impl CPU {
             Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
             Instruction::Set(x, y) => self.exec_set(x, y)?,
             Instruction::Or(x, y) => self.exec_or(x, y)?,
-            Instruction::Xor(x, y) => self.exec_xor(x, y)?,
             Instruction::And(x, y) => self.exec_and(x, y)?,
+            Instruction::Xor(x, y) => self.exec_xor(x, y)?,
+            Instruction::Add(x, y) => self.exec_add(x, y)?,
+            Instruction::Sub(x, y) => self.exec_sub(x, y)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
@@ -138,6 +140,24 @@ impl CPU {
         Ok(())
     }
 
+    fn exec_add(&mut self, x: u8, y: u8) -> Result<()> {
+        let (value, carry) = self
+            .read_register(x)?
+            .overflowing_add(self.read_register(y)?);
+        self.set_register(x, value)?;
+        self.set_register(0xF, carry as u8)?;
+        Ok(())
+    }
+
+    fn exec_sub(&mut self, x: u8, y: u8) -> Result<()> {
+        let (value, carry) = self
+            .read_register(x)?
+            .overflowing_sub(self.read_register(y)?);
+        self.set_register(x, value)?;
+        self.set_register(0xF, !carry as u8)?;
+        Ok(())
+    }
+
     fn exec_load_i(&mut self, value: u16) -> Result<()> {
         self.i_register = value;
         Ok(())
@@ -157,7 +177,7 @@ impl CPU {
             &mut self.v_buffer,
         );
 
-        self.v_registers[0xF] = if did_collide { 1 } else { 0 };
+        self.v_registers[0xF] = did_collide as u8;
 
         Ok(())
     }
@@ -340,6 +360,66 @@ mod tests {
         assert_eq!(cpu.pc, 0x202);
         assert_eq!(cpu.v_registers[0x0], 0b_0111_0000);
         assert_eq!(cpu.v_registers[0x1], 0b_0110_1111);
+    }
+
+    #[test]
+    fn test_add() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x14]);
+        cpu.v_registers[0x0] = 0x0F;
+        cpu.v_registers[0x1] = 0x11;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0x20);
+        assert_eq!(cpu.v_registers[0x1], 0x11);
+        assert_eq!(cpu.v_registers[0xF], 0x0);
+    }
+
+    #[test]
+    fn test_add_overflow() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x14]);
+        cpu.v_registers[0x0] = 0xFD;
+        cpu.v_registers[0x1] = 0x04;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0x01);
+        assert_eq!(cpu.v_registers[0x1], 0x04);
+        assert_eq!(cpu.v_registers[0xF], 0x01);
+    }
+
+    #[test]
+    fn test_sub() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x15]);
+        cpu.v_registers[0x0] = 0xF0;
+        cpu.v_registers[0x1] = 0x11;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0xDF);
+        assert_eq!(cpu.v_registers[0x1], 0x11);
+        assert_eq!(cpu.v_registers[0xF], 0x1);
+    }
+
+    #[test]
+    fn test_sub_overflow() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x15]);
+        cpu.v_registers[0x0] = 0xF0;
+        cpu.v_registers[0x1] = 0xF1;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0xFF);
+        assert_eq!(cpu.v_registers[0x1], 0xF1);
+        assert_eq!(cpu.v_registers[0xF], 0x0);
     }
 
     #[test]
