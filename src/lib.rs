@@ -1,3 +1,5 @@
-pub fn run() {
-    println!("Hello, world!");
+use std::path::PathBuf;
+
+pub fn run(filename: PathBuf) {
+    println!("{:?}", filename);
 }
