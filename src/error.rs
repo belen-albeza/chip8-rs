@@ -44,12 +44,16 @@ impl From<CPUError> for Error {
 #[derive(Debug, PartialEq)]
 pub enum CPUError {
     MemoryOverflow,
+    InvalidOpcode(u16),
+    InvalidAddress(u16),
 }
 
 impl fmt::Display for CPUError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MemoryOverflow => write!(f, "Memory overflow"),
+            Self::InvalidOpcode(op) => write!(f, "Invalid opcode: {:#04X}", op),
+            Self::InvalidAddress(addr) => write!(f, "Invalid memory address: {:#04X}", addr),
         }
     }
 }

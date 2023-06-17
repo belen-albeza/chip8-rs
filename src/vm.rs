@@ -25,7 +25,9 @@ impl VM {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        Ok(())
+        loop {
+            self.cpu.tick()?;
+        }
     }
 
     fn reset(&mut self) {

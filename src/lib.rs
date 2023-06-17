@@ -1,5 +1,6 @@
 mod cpu;
 mod error;
+mod instruction;
 pub mod vm;
 
 use std::path::PathBuf;
