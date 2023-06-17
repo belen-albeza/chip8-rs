@@ -1,5 +1,8 @@
+use std::fmt;
+
 use crate::error::CPUError;
 use crate::instruction::Instruction;
+use crate::sprites;
 
 pub type Result<T> = std::result::Result<T, CPUError>;
 
@@ -48,7 +51,7 @@ impl CPU {
             Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
             Instruction::ClearScreen => self.exec_clear_screen()?,
-            Instruction::DrawSprite(_, _, _) => todo!("unimplemented"),
+            Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
 
         Ok(())
@@ -100,6 +103,54 @@ impl CPU {
     fn exec_clear_screen(&mut self) -> Result<()> {
         self.v_buffer.fill(false);
         Ok(())
+    }
+
+    fn exec_draw_sprite(&mut self, vx: u8, vy: u8, n: u8) -> Result<()> {
+        let sprite_addr = self.i_register as usize;
+        let size = n as usize;
+        if (sprite_addr + size - 1) >= self.memory.len() {
+            return Err(CPUError::InvalidAddress((sprite_addr + size - 1) as u16));
+        }
+
+        let x = self.read_register(vx)?;
+        let y = self.read_register(vy)?;
+
+        let sprite = &self.memory[sprite_addr..sprite_addr + size];
+        sprites::draw(
+            sprite,
+            x as usize,
+            y as usize,
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            &mut self.v_buffer,
+        );
+
+        Ok(())
+    }
+
+    fn read_register(&self, x: u8) -> Result<u8> {
+        self.v_registers
+            .get(x as usize)
+            .ok_or(CPUError::InvalidVRegister(x))
+            .copied()
+    }
+}
+
+impl fmt::Display for CPU {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut output = "".to_string();
+        for y in 0..SCREEN_HEIGHT {
+            for x in 0..SCREEN_WIDTH {
+                let pixel = if self.v_buffer[y * SCREEN_WIDTH + x] {
+                    "*"
+                } else {
+                    " "
+                };
+                output += pixel;
+            }
+            output += "\n";
+        }
+
+        write!(f, "{}", output)
     }
 }
 
@@ -217,5 +268,26 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0202);
         assert_eq!(cpu.v_buffer, [false; SCREEN_WIDTH * SCREEN_HEIGHT]);
+    }
+
+    #[test]
+    fn test_draw_sprite_simple() {
+        let mut cpu = any_cpu_with_rom(&[0xD0, 0x13]);
+        cpu.i_register = 0x300;
+        cpu.v_registers[0] = 0x1;
+        cpu.v_registers[1] = 0x2;
+        cpu.memory[0x300] = 0xFF;
+        cpu.memory[0x301] = 0x00;
+        cpu.memory[0x302] = 0xFF;
+
+        let res = cpu.tick();
+
+        let i = (2 * SCREEN_WIDTH) + 1;
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0202);
+        assert_eq!(cpu.v_buffer[i..(i + 8)], [true; 8]);
+        assert_eq!(cpu.v_buffer[i + 64..(i + 64 + 8)], [false; 8]);
+        assert_eq!(cpu.v_buffer[i + 128..(i + 128 + 8)], [true; 8]);
+        assert_eq!(cpu.v_registers[0xF], 0);
     }
 }
