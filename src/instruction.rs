@@ -10,6 +10,8 @@ pub enum Instruction {
     LoadVx(u8, u8),
     // 7xkk -> Vx += kk
     AddVx(u8, u8),
+    // 8xy9 -> Vx = Vy
+    Set(u8, u8),
     // Annn -> I = nnn
     LoadI(u16),
     // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy). VF=collision
@@ -35,6 +37,7 @@ impl TryFrom<u16> for Instruction {
             (0x1, _, _, _) => Ok(Self::Jump(nnn)),
             (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
             (0x7, x, _, _) => Ok(Self::AddVx(x, kk)),
+            (0x8, x, y, 0x0) => Ok(Self::Set(x, y)),
             (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             _ => Err(CPUError::InvalidOpcode(value)),
@@ -54,6 +57,7 @@ mod tests {
 
     #[test]
     fn test_try_from_valid_opcodes() {
+        assert_eq!(Instruction::try_from(0x00E0), Ok(Instruction::ClearScreen));
         assert_eq!(Instruction::try_from(0x1123), Ok(Instruction::Jump(0x123)));
         assert_eq!(
             Instruction::try_from(0x6122),
@@ -63,8 +67,11 @@ mod tests {
             Instruction::try_from(0x73FF),
             Ok(Instruction::AddVx(0x3, 0xFF))
         );
+        assert_eq!(
+            Instruction::try_from(0x8120),
+            Ok(Instruction::Set(0x1, 0x2))
+        );
         assert_eq!(Instruction::try_from(0xABCD), Ok(Instruction::LoadI(0xBCD)));
-        assert_eq!(Instruction::try_from(0x00E0), Ok(Instruction::ClearScreen));
         assert_eq!(
             Instruction::try_from(0xD12A),
             Ok(Instruction::DrawSprite(0x1, 0x2, 0xA))

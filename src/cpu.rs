@@ -46,11 +46,12 @@ impl CPU {
         let instruction = Instruction::try_from(opcode)?;
 
         match instruction {
+            Instruction::ClearScreen => self.exec_clear_screen()?,
             Instruction::Jump(addr) => self.exec_jump(addr)?,
             Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
             Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
+            Instruction::Set(x, y) => self.exec_set(x, y)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
-            Instruction::ClearScreen => self.exec_clear_screen()?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
 
@@ -70,19 +71,34 @@ impl CPU {
         Ok(*value)
     }
 
+    fn read_register(&self, x: u8) -> Result<u8> {
+        self.v_registers
+            .get(x as usize)
+            .ok_or(CPUError::InvalidVRegister(x))
+            .copied()
+    }
+
+    fn set_register(&mut self, x: u8, value: u8) -> Result<()> {
+        let i = self
+            .v_registers
+            .get_mut(x as usize)
+            .ok_or(CPUError::InvalidVRegister(x))?;
+        *i = value;
+        Ok(())
+    }
+
+    fn exec_clear_screen(&mut self) -> Result<()> {
+        self.v_buffer.fill(false);
+        Ok(())
+    }
+
     fn exec_jump(&mut self, to: u16) -> Result<()> {
         self.pc = to;
         Ok(())
     }
 
     fn exec_load_vx(&mut self, x: u8, value: u8) -> Result<()> {
-        let i = self
-            .v_registers
-            .get_mut(x as usize)
-            .ok_or(CPUError::InvalidVRegister(x))?;
-        *i = value;
-
-        Ok(())
+        self.set_register(x, value)
     }
 
     fn exec_add_vx(&mut self, x: u8, value: u8) -> Result<()> {
@@ -95,13 +111,14 @@ impl CPU {
         Ok(())
     }
 
-    fn exec_load_i(&mut self, value: u16) -> Result<()> {
-        self.i_register = value;
+    fn exec_set(&mut self, x: u8, y: u8) -> Result<()> {
+        let value = self.read_register(y)?;
+        self.set_register(x, value)?;
         Ok(())
     }
 
-    fn exec_clear_screen(&mut self) -> Result<()> {
-        self.v_buffer.fill(false);
+    fn exec_load_i(&mut self, value: u16) -> Result<()> {
+        self.i_register = value;
         Ok(())
     }
 
@@ -127,13 +144,6 @@ impl CPU {
         self.v_registers[0xF] = if did_collide { 1 } else { 0 };
 
         Ok(())
-    }
-
-    fn read_register(&self, x: u8) -> Result<u8> {
-        self.v_registers
-            .get(x as usize)
-            .ok_or(CPUError::InvalidVRegister(x))
-            .copied()
     }
 }
 
@@ -217,6 +227,18 @@ mod tests {
     }
 
     #[test]
+    fn test_clear_screen() {
+        let mut cpu = any_cpu_with_rom(&[0x00, 0xe0]);
+        cpu.v_buffer = [true; SCREEN_WIDTH * SCREEN_HEIGHT];
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0202);
+        assert_eq!(cpu.v_buffer, [false; SCREEN_WIDTH * SCREEN_HEIGHT]);
+    }
+
+    #[test]
     fn test_exec_jump() {
         let mut cpu = any_cpu_with_rom(&[0x13, 0x21]);
 
@@ -250,6 +272,18 @@ mod tests {
     }
 
     #[test]
+    fn test_set() {
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x10]);
+        cpu.v_registers[0x1] = 0xA;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.v_registers[0x0], 0xA);
+    }
+
+    #[test]
     fn test_load_i() {
         let mut cpu = any_cpu_with_rom(&[0xA1, 0x23]);
 
@@ -258,18 +292,6 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0202);
         assert_eq!(cpu.i_register, 0x123);
-    }
-
-    #[test]
-    fn test_clear_screen() {
-        let mut cpu = any_cpu_with_rom(&[0x00, 0xe0]);
-        cpu.v_buffer = [true; SCREEN_WIDTH * SCREEN_HEIGHT];
-
-        let res = cpu.tick();
-
-        assert!(res.is_ok());
-        assert_eq!(cpu.pc, 0x0202);
-        assert_eq!(cpu.v_buffer, [false; SCREEN_WIDTH * SCREEN_HEIGHT]);
     }
 
     #[test]
