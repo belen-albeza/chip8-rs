@@ -12,6 +12,7 @@ pub struct CPU {
     memory: [u8; MEM_SIZE],
     pc: u16,
     v_registers: [u8; V_REGISTERS_SIZE],
+    i_register: u16,
 }
 
 impl CPU {
@@ -20,6 +21,7 @@ impl CPU {
             memory: [0; MEM_SIZE],
             pc: 0x200,
             v_registers: [0; V_REGISTERS_SIZE],
+            i_register: 0,
         }
     }
 
@@ -40,6 +42,7 @@ impl CPU {
             Instruction::Jump(addr) => self.exec_jump(addr)?,
             Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
             Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
+            Instruction::LoadI(x) => self.exec_load_i(x)?,
         }
 
         Ok(())
@@ -78,6 +81,11 @@ impl CPU {
 
         Ok(())
     }
+
+    fn exec_load_i(&mut self, value: u16) -> Result<()> {
+        self.i_register = value;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -96,6 +104,7 @@ mod tests {
         assert_eq!(cpu.memory, [0; 4096]);
         assert_eq!(cpu.pc, 0x200);
         assert_eq!(cpu.v_registers, [0; 16]);
+        assert_eq!(cpu.i_register, 0);
     }
 
     #[test]
@@ -170,5 +179,16 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0202);
         assert_eq!(cpu.v_registers[0xA], 0x90);
+    }
+
+    #[test]
+    fn test_load_i() {
+        let mut cpu = any_cpu_with_rom(&[0xA1, 0x23]);
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x0202);
+        assert_eq!(cpu.i_register, 0x123);
     }
 }

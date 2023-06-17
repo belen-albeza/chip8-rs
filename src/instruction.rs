@@ -2,12 +2,14 @@ use crate::error::CPUError;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Instruction {
-    // 1nnn -> Jump to address nnnn
+    // 1nnn -> PC = nnn
     Jump(u16),
     // 6xkk -> Vx = kk
     LoadVx(u8, u8),
     // 7xkk -> Vx += kk
     AddVx(u8, u8),
+    // Annn -> I = nnn
+    LoadI(u16),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -28,6 +30,7 @@ impl TryFrom<u16> for Instruction {
             (0x1, _, _, _) => Ok(Self::Jump(nnn)),
             (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
             (0x7, x, _, _) => Ok(Self::AddVx(x, kk)),
+            (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -53,6 +56,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x73FF),
             Ok(Instruction::AddVx(0x3, 0xFF))
-        )
+        );
+        assert_eq!(Instruction::try_from(0xABCD), Ok(Instruction::LoadI(0xBCD)));
     }
 }
