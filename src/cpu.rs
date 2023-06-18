@@ -1,3 +1,4 @@
+use rand::{Rng, RngCore};
 use std::fmt;
 
 use crate::error::CPUError;
@@ -14,7 +15,7 @@ const SCREEN_HEIGHT: usize = 32;
 const STACK_SIZE: usize = 16;
 
 #[allow(dead_code)]
-pub struct CPU {
+pub struct CPU<'a> {
     memory: [u8; MEM_SIZE],
     pc: u16,
     sp: usize,
@@ -22,10 +23,11 @@ pub struct CPU {
     i_register: u16,
     v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
     stack: [u16; STACK_SIZE],
+    rng: &'a mut dyn RngCore,
 }
 
-impl CPU {
-    pub fn new() -> Self {
+impl<'a> CPU<'a> {
+    pub fn new(rng: &'a mut impl RngCore) -> Self {
         Self {
             memory: [0; MEM_SIZE],
             pc: 0x200,
@@ -34,6 +36,7 @@ impl CPU {
             i_register: 0,
             v_buffer: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
             stack: [0; STACK_SIZE],
+            rng: rng,
         }
     }
 
@@ -44,6 +47,16 @@ impl CPU {
 
         self.memory[MEM_START..(MEM_START + rom.len())].copy_from_slice(rom);
         Ok(())
+    }
+
+    pub fn reset(&mut self) {
+        self.memory = [0; MEM_SIZE];
+        self.pc = 0x200;
+        self.sp = 0;
+        self.v_registers = [0; V_REGISTERS_SIZE];
+        self.i_register = 0;
+        self.v_buffer = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
+        self.stack = [0; STACK_SIZE]
     }
 
     pub fn tick(&mut self) -> Result<()> {
@@ -73,6 +86,7 @@ impl CPU {
             Instruction::SkipNotEqual(x, y) => self.exec_skip_if_not_equal(x, y)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
             Instruction::JumpOffset(x, addr) => self.exec_jump_offset(x, addr)?,
+            Instruction::Rand(x, value) => self.exec_rand(x, value)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
 
@@ -270,6 +284,13 @@ impl CPU {
         Ok(())
     }
 
+    fn exec_rand(&mut self, x: u8, value: u8) -> Result<()> {
+        let randomized: u8 = self.rng.gen();
+        self.set_register(x, randomized & value)?;
+
+        Ok(())
+    }
+
     fn exec_draw_sprite(&mut self, vx: u8, vy: u8, n: u8) -> Result<()> {
         let sprite = sprites::read_sprite(self.i_register as usize, n as usize, &self.memory)?;
 
@@ -290,7 +311,7 @@ impl CPU {
     }
 }
 
-impl fmt::Display for CPU {
+impl fmt::Display for CPU<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut output = "".to_string();
         for y in 0..SCREEN_HEIGHT {
@@ -313,15 +334,20 @@ impl fmt::Display for CPU {
 mod tests {
     use super::*;
 
-    fn any_cpu_with_rom(rom: &[u8]) -> CPU {
-        let mut cpu = CPU::new();
+    fn any_mocked_rng() -> impl RngCore {
+        rand::rngs::mock::StepRng::new(1, 1)
+    }
+
+    fn any_cpu_with_rom<'a>(rom: &[u8], rng: &'a mut impl RngCore) -> CPU<'a> {
+        let mut cpu = CPU::new(rng);
         cpu.load_rom(rom).expect("Couldn't load ROM");
         cpu
     }
 
     #[test]
     fn test_new() {
-        let cpu = CPU::new();
+        let mut rng = any_mocked_rng();
+        let cpu = CPU::new(&mut rng);
         assert_eq!(cpu.memory, [0; 4096]);
         assert_eq!(cpu.pc, 0x200);
         assert_eq!(cpu.v_registers, [0; 16]);
@@ -332,7 +358,8 @@ mod tests {
 
     #[test]
     fn test_load_rom_ok() {
-        let mut cpu = CPU::new();
+        let mut rng = any_mocked_rng();
+        let mut cpu = CPU::new(&mut rng);
         let rom: [u8; 2] = [0x00, 0xE0];
 
         let res = cpu.load_rom(&rom);
@@ -345,7 +372,8 @@ mod tests {
 
     #[test]
     fn test_load_rom_returns_error_on_memory_overflow() {
-        let mut cpu = CPU::new();
+        let mut rng = any_mocked_rng();
+        let mut cpu = CPU::new(&mut rng);
         let rom: [u8; 4096 - 199] = [0; 4096 - 199];
 
         let res = cpu.load_rom(&rom);
@@ -355,7 +383,8 @@ mod tests {
 
     #[test]
     fn test_tick_returns_err_on_invalid_opcode() {
-        let mut cpu = any_cpu_with_rom(&[0xFF, 0xFF]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xFF, 0xFF], &mut rng);
         let res = cpu.tick();
 
         assert_eq!(res.unwrap_err(), CPUError::InvalidOpcode(0xFFFF));
@@ -363,7 +392,8 @@ mod tests {
 
     #[test]
     fn test_tick_returns_err_if_invalid_pc() {
-        let mut cpu = any_cpu_with_rom(&[]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[], &mut rng);
         cpu.pc = 0x1000;
 
         let res = cpu.tick();
@@ -373,7 +403,8 @@ mod tests {
 
     #[test]
     fn test_noop() {
-        let mut cpu = any_cpu_with_rom(&[0x01, 0x23]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x01, 0x23], &mut rng);
 
         let res = cpu.tick();
 
@@ -383,7 +414,8 @@ mod tests {
 
     #[test]
     fn test_clear_screen() {
-        let mut cpu = any_cpu_with_rom(&[0x00, 0xe0]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x00, 0xe0], &mut rng);
         cpu.v_buffer = [true; SCREEN_WIDTH * SCREEN_HEIGHT];
 
         let res = cpu.tick();
@@ -395,7 +427,8 @@ mod tests {
 
     #[test]
     fn test_return() {
-        let mut cpu = any_cpu_with_rom(&[0x00, 0xee]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x00, 0xee], &mut rng);
         cpu.stack[0] = 0x300;
         cpu.sp = 1;
 
@@ -408,7 +441,8 @@ mod tests {
 
     #[test]
     fn test_jump() {
-        let mut cpu = any_cpu_with_rom(&[0x13, 0x21]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x13, 0x21], &mut rng);
 
         let res = cpu.tick();
 
@@ -418,7 +452,8 @@ mod tests {
 
     #[test]
     fn test_call() {
-        let mut cpu = any_cpu_with_rom(&[0x23, 0x21]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x23, 0x21], &mut rng);
 
         let res = cpu.tick();
 
@@ -430,7 +465,8 @@ mod tests {
 
     #[test]
     fn test_call_stack_overflow() {
-        let mut cpu = any_cpu_with_rom(&[0x23, 0x21]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x23, 0x21], &mut rng);
         cpu.sp = 16;
 
         let res = cpu.tick();
@@ -440,7 +476,8 @@ mod tests {
 
     #[test]
     fn test_skip_vx_if_equal_skips() {
-        let mut cpu = any_cpu_with_rom(&[0x30, 0x42]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x30, 0x42], &mut rng);
         cpu.v_registers[0] = 0x42;
 
         let res = cpu.tick();
@@ -451,7 +488,8 @@ mod tests {
 
     #[test]
     fn test_skip_vx_if_equal_does_not_skip() {
-        let mut cpu = any_cpu_with_rom(&[0x30, 0x42]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x30, 0x42], &mut rng);
         cpu.v_registers[0] = 0x00;
 
         let res = cpu.tick();
@@ -462,7 +500,8 @@ mod tests {
 
     #[test]
     fn test_skip_vx_if_not_equal_skips() {
-        let mut cpu = any_cpu_with_rom(&[0x40, 0x42]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x40, 0x42], &mut rng);
         cpu.v_registers[0] = 0x00;
 
         let res = cpu.tick();
@@ -473,7 +512,8 @@ mod tests {
 
     #[test]
     fn test_skip_vx_if_not_equal_does_not_skip() {
-        let mut cpu = any_cpu_with_rom(&[0x40, 0x42]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x40, 0x42], &mut rng);
         cpu.v_registers[0] = 0x42;
 
         let res = cpu.tick();
@@ -484,7 +524,8 @@ mod tests {
 
     #[test]
     fn test_skip_if_equal_skips() {
-        let mut cpu = any_cpu_with_rom(&[0x50, 0x10]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x50, 0x10], &mut rng);
         cpu.v_registers[0] = 0xFF;
         cpu.v_registers[1] = 0xFF;
 
@@ -496,7 +537,8 @@ mod tests {
 
     #[test]
     fn test_skip_if_equal_does_not_skip() {
-        let mut cpu = any_cpu_with_rom(&[0x50, 0x10]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x50, 0x10], &mut rng);
         cpu.v_registers[0] = 0x00;
         cpu.v_registers[1] = 0xFF;
 
@@ -508,7 +550,8 @@ mod tests {
 
     #[test]
     fn test_load_vx() {
-        let mut cpu = any_cpu_with_rom(&[0x6A, 0x8F]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x6A, 0x8F], &mut rng);
 
         let res = cpu.tick();
 
@@ -519,7 +562,8 @@ mod tests {
 
     #[test]
     fn test_add_vx() {
-        let mut cpu = any_cpu_with_rom(&[0x7A, 0x8F]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x7A, 0x8F], &mut rng);
         cpu.v_registers[0xA] = 0x1;
 
         let res = cpu.tick();
@@ -531,7 +575,8 @@ mod tests {
 
     #[test]
     fn test_set() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x10]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x10], &mut rng);
         cpu.v_registers[0x1] = 0xA;
 
         let res = cpu.tick();
@@ -544,7 +589,8 @@ mod tests {
 
     #[test]
     fn test_or() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x11]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x11], &mut rng);
         cpu.v_registers[0x0] = 0b_0001_1111;
         cpu.v_registers[0x1] = 0b_0110_1111;
 
@@ -558,7 +604,8 @@ mod tests {
 
     #[test]
     fn test_and() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x12]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x12], &mut rng);
         cpu.v_registers[0x0] = 0b_0001_1111;
         cpu.v_registers[0x1] = 0b_0110_1111;
 
@@ -572,7 +619,8 @@ mod tests {
 
     #[test]
     fn test_xor() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x13]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x13], &mut rng);
         cpu.v_registers[0x0] = 0b_0001_1111;
         cpu.v_registers[0x1] = 0b_0110_1111;
 
@@ -586,7 +634,8 @@ mod tests {
 
     #[test]
     fn test_add() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x14]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x14], &mut rng);
         cpu.v_registers[0x0] = 0x0F;
         cpu.v_registers[0x1] = 0x11;
 
@@ -601,7 +650,8 @@ mod tests {
 
     #[test]
     fn test_add_overflow() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x14]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x14], &mut rng);
         cpu.v_registers[0x0] = 0xFD;
         cpu.v_registers[0x1] = 0x04;
 
@@ -616,7 +666,8 @@ mod tests {
 
     #[test]
     fn test_sub() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x15]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x15], &mut rng);
         cpu.v_registers[0x0] = 0xF0;
         cpu.v_registers[0x1] = 0x11;
 
@@ -631,7 +682,8 @@ mod tests {
 
     #[test]
     fn test_sub_overflow() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x15]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x15], &mut rng);
         cpu.v_registers[0x0] = 0xF0;
         cpu.v_registers[0x1] = 0xF1;
 
@@ -646,7 +698,8 @@ mod tests {
 
     #[test]
     fn test_shift_right_vx() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x16]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x16], &mut rng);
         cpu.v_registers[0x0] = 0b_0100_1110;
 
         let res = cpu.tick();
@@ -659,7 +712,8 @@ mod tests {
 
     #[test]
     fn test_shift_right_vx_with_shifted_out_bit() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x16]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x16], &mut rng);
         cpu.v_registers[0x0] = 0b_0100_1111;
 
         let res = cpu.tick();
@@ -672,7 +726,8 @@ mod tests {
 
     #[test]
     fn test_subn() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x17]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x17], &mut rng);
         cpu.v_registers[0x0] = 0x11;
         cpu.v_registers[0x1] = 0xF0;
 
@@ -687,7 +742,8 @@ mod tests {
 
     #[test]
     fn test_subn_overflow() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x17]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x17], &mut rng);
         cpu.v_registers[0x0] = 0xF1;
         cpu.v_registers[0x1] = 0xF0;
 
@@ -702,7 +758,8 @@ mod tests {
 
     #[test]
     fn test_shift_left_vx() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x1E]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x1E], &mut rng);
         cpu.v_registers[0x0] = 0b_0100_1110;
 
         let res = cpu.tick();
@@ -715,7 +772,8 @@ mod tests {
 
     #[test]
     fn test_shift_left_vx_with_shifted_out_bit() {
-        let mut cpu = any_cpu_with_rom(&[0x80, 0x1E]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x80, 0x1E], &mut rng);
         cpu.v_registers[0x0] = 0b_1100_1111;
 
         let res = cpu.tick();
@@ -728,7 +786,8 @@ mod tests {
 
     #[test]
     fn test_skip_if_not_equal_skips() {
-        let mut cpu = any_cpu_with_rom(&[0x90, 0x10]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x90, 0x10], &mut rng);
         cpu.v_registers[0] = 0xFF;
         cpu.v_registers[1] = 0x0F;
 
@@ -740,7 +799,8 @@ mod tests {
 
     #[test]
     fn test_skip_if_not_equal_does_not_skip() {
-        let mut cpu = any_cpu_with_rom(&[0x90, 0x10]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0x90, 0x10], &mut rng);
         cpu.v_registers[0] = 0xFF;
         cpu.v_registers[1] = 0xFF;
 
@@ -752,7 +812,8 @@ mod tests {
 
     #[test]
     fn test_load_i() {
-        let mut cpu = any_cpu_with_rom(&[0xA1, 0x23]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xA1, 0x23], &mut rng);
 
         let res = cpu.tick();
 
@@ -763,7 +824,8 @@ mod tests {
 
     #[test]
     fn test_jump_offset() {
-        let mut cpu = any_cpu_with_rom(&[0xB2, 0x23]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xB2, 0x23], &mut rng);
         cpu.v_registers[0x2] = 0x10;
 
         let res = cpu.tick();
@@ -773,8 +835,20 @@ mod tests {
     }
 
     #[test]
+    fn test_rand() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xC0, 0xAB], &mut rng);
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.v_registers[0], 0x01 & 0xAB);
+    }
+
+    #[test]
     fn test_draw_sprite_simple() {
-        let mut cpu = any_cpu_with_rom(&[0xD0, 0x13]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xD0, 0x13], &mut rng);
         cpu.i_register = 0x300;
         cpu.v_registers[0] = 0x1;
         cpu.v_registers[1] = 0x2;
@@ -795,7 +869,8 @@ mod tests {
 
     #[test]
     fn test_draw_sprite_wraps() {
-        let mut cpu = any_cpu_with_rom(&[0xD0, 0x13]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xD0, 0x13], &mut rng);
         cpu.i_register = 0x300;
         cpu.v_registers[0] = 60;
         cpu.v_registers[1] = 30;
@@ -821,7 +896,8 @@ mod tests {
 
     #[test]
     fn test_draw_sprite_with_collision() {
-        let mut cpu = any_cpu_with_rom(&[0xD0, 0x11]);
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xD0, 0x11], &mut rng);
         cpu.i_register = 0x300;
         cpu.v_registers[0] = 0;
         cpu.v_registers[1] = 0;

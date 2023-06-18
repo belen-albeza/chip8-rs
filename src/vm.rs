@@ -1,3 +1,4 @@
+use rand::RngCore;
 use std::fs;
 use std::path::PathBuf;
 
@@ -11,13 +12,13 @@ use crate::screen;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub struct VM {
-    cpu: CPU,
+pub struct VM<'a> {
+    cpu: CPU<'a>,
 }
 
-impl VM {
-    pub fn new() -> Self {
-        Self { cpu: CPU::new() }
+impl<'a> VM<'a> {
+    pub fn new(rng: &'a mut impl RngCore) -> Self {
+        Self { cpu: CPU::new(rng) }
     }
 
     pub fn load_rom(&mut self, filename: PathBuf) -> Result<()> {
@@ -53,7 +54,7 @@ impl VM {
     }
 
     fn reset(&mut self) {
-        self.cpu = CPU::new();
+        self.cpu.reset();
     }
 
     fn handle_user_input(&mut self, event_pump: &mut EventPump) -> bool {

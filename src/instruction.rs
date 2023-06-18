@@ -46,6 +46,8 @@ pub enum Instruction {
     LoadI(u16),
     // Bxnn -> PC = xnn + Vx
     JumpOffset(u8, u16),
+    // Cxkk -> Vx = rand() AND kk
+    Rand(u8, u8),
     // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy); VF = collision
     DrawSprite(u8, u8, u8),
 }
@@ -87,6 +89,7 @@ impl TryFrom<u16> for Instruction {
             (0x9, x, y, 0) => Ok(Self::SkipNotEqual(x, y)),
             (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
             (0xB, x, _, _) => Ok(Self::JumpOffset(x, nnn)),
+            (0xC, x, _, _) => Ok(Self::Rand(x, kk)),
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
@@ -171,6 +174,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xB123),
             Ok(Instruction::JumpOffset(0x01, 0x123))
+        );
+        assert_eq!(
+            Instruction::try_from(0xC0AB),
+            Ok(Instruction::Rand(0x0, 0xAB)),
         );
         assert_eq!(
             Instruction::try_from(0xD12A),
