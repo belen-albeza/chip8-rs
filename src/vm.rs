@@ -13,6 +13,9 @@ use crate::screen;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+const FPS: f64 = 60.0;
+const FRAMES_PER_CYCLE: i32 = 1;
+
 pub struct VM<'a> {
     cpu: CPU<'a>,
     keymap: HashMap<Scancode, u8>,
@@ -41,17 +44,25 @@ impl<'a> VM<'a> {
         let mut screen = screen::Screen::try_from(&texture_creator)?;
         let mut event_pump = sdl_context.event_pump().map_err(to_sdl_err)?;
 
+        let mut frames = -1;
+
         loop {
             let shall_halt = self.handle_user_input(&mut event_pump)?;
             if shall_halt {
                 break;
             }
 
-            let _ = self.cpu.tick()?;
+            frames += 1;
+
+            if frames % FRAMES_PER_CYCLE == 0 {
+                let _ = self.cpu.tick()?;
+                frames = 0;
+            }
+
             screen.frame(&mut canvas, self.cpu.visual_buffer())?;
 
             ::std::thread::sleep(std::time::Duration::from_millis(
-                (1.0 / 30.0 * 1000.0) as u64,
+                (1.0 / FPS * 1000.0) as u64,
             ));
         }
 
