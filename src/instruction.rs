@@ -50,6 +50,8 @@ pub enum Instruction {
     Rand(u8, u8),
     // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy); VF = collision
     DrawSprite(u8, u8, u8),
+    // Ex9E -> Skip next if Key(Vx) is not pressed
+    SkipIfKey(u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -91,6 +93,7 @@ impl TryFrom<u16> for Instruction {
             (0xB, x, _, _) => Ok(Self::JumpOffset(x, nnn)),
             (0xC, x, _, _) => Ok(Self::Rand(x, kk)),
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
+            (0xE, x, 0x9, 0xE) => Ok(Self::SkipIfKey(x)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -183,5 +186,9 @@ mod tests {
             Instruction::try_from(0xD12A),
             Ok(Instruction::DrawSprite(0x1, 0x2, 0xA))
         );
+        assert_eq!(
+            Instruction::try_from(0xE79E),
+            Ok(Instruction::SkipIfKey(0x07))
+        )
     }
 }

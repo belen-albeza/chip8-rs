@@ -101,6 +101,7 @@ impl<'a> CPU<'a> {
             Instruction::JumpOffset(x, addr) => self.exec_jump_offset(x, addr)?,
             Instruction::Rand(x, value) => self.exec_rand(x, value)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
+            Instruction::SkipIfKey(vx) => self.exec_skip_if_key(vx)?,
         }
 
         Ok(())
@@ -133,6 +134,13 @@ impl<'a> CPU<'a> {
             .ok_or(CPUError::InvalidVRegister(x))?;
         *i = value;
         Ok(())
+    }
+
+    fn read_key(&self, i: u8) -> Result<bool> {
+        self.keypad
+            .get(i as usize)
+            .ok_or(CPUError::InvalidKey(i as usize))
+            .copied()
     }
 
     fn push_stack(&mut self, value: u16) -> Result<()> {
@@ -319,6 +327,17 @@ impl<'a> CPU<'a> {
         );
 
         self.v_registers[0xF] = did_collide as u8;
+
+        Ok(())
+    }
+
+    fn exec_skip_if_key(&mut self, vx: u8) -> Result<()> {
+        let key_idx = self.read_register(vx)?;
+        let is_key_pressed = self.read_key(key_idx)?;
+
+        if is_key_pressed {
+            self.pc += 2;
+        }
 
         Ok(())
     }
@@ -945,10 +964,48 @@ mod tests {
         let res = cpu.tick();
 
         assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
         assert_eq!(
             cpu.v_buffer[0..8],
             [true, true, true, true, false, false, false, false]
         );
         assert_eq!(cpu.v_registers[0xF], 1);
+    }
+
+    #[test]
+    fn test_skip_if_key_skips_when_key_is_pressed() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0x9E], &mut rng);
+        cpu.v_registers[0x0] = 0x07;
+        cpu.keypad[0x07] = true;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_skip_if_key_does_not_skip_when_key_is_not_pressed() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0x9E], &mut rng);
+        cpu.v_registers[0x0] = 0x07;
+        cpu.keypad[0x07] = false;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_skip_if_key_returns_error_when_invalid_key() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0x9E], &mut rng);
+        cpu.v_registers[0x0] = 0x10;
+
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap_err(), CPUError::InvalidKey(0x10));
     }
 }
