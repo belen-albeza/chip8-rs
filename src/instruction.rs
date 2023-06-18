@@ -44,6 +44,8 @@ pub enum Instruction {
     SkipNotEqual(u8, u8),
     // Annn -> I = nnn
     LoadI(u16),
+    // Bxnn -> PC = xnn + Vx
+    JumpOffset(u8, u16),
     // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy); VF = collision
     DrawSprite(u8, u8, u8),
 }
@@ -84,6 +86,7 @@ impl TryFrom<u16> for Instruction {
             (0x8, x, _, 0xE) => Ok(Self::ShiftLeftVx(x)),
             (0x9, x, y, 0) => Ok(Self::SkipNotEqual(x, y)),
             (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
+            (0xB, x, _, _) => Ok(Self::JumpOffset(x, nnn)),
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
@@ -165,6 +168,10 @@ mod tests {
             Ok(Instruction::SkipNotEqual(0xA, 0xB))
         );
         assert_eq!(Instruction::try_from(0xABCD), Ok(Instruction::LoadI(0xBCD)));
+        assert_eq!(
+            Instruction::try_from(0xB123),
+            Ok(Instruction::JumpOffset(0x01, 0x123))
+        );
         assert_eq!(
             Instruction::try_from(0xD12A),
             Ok(Instruction::DrawSprite(0x1, 0x2, 0xA))

@@ -72,6 +72,7 @@ impl CPU {
             Instruction::ShiftLeftVx(x) => self.exec_shiftl_vx(x)?,
             Instruction::SkipNotEqual(x, y) => self.exec_skip_if_not_equal(x, y)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
+            Instruction::JumpOffset(x, addr) => self.exec_jump_offset(x, addr)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
 
@@ -260,6 +261,12 @@ impl CPU {
 
     fn exec_load_i(&mut self, value: u16) -> Result<()> {
         self.i_register = value;
+        Ok(())
+    }
+
+    fn exec_jump_offset(&mut self, x: u8, addr: u16) -> Result<()> {
+        let offset = self.read_register(x)?;
+        self.pc = addr + offset as u16;
         Ok(())
     }
 
@@ -752,6 +759,17 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x0202);
         assert_eq!(cpu.i_register, 0x123);
+    }
+
+    #[test]
+    fn test_jump_offset() {
+        let mut cpu = any_cpu_with_rom(&[0xB2, 0x23]);
+        cpu.v_registers[0x2] = 0x10;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x233);
     }
 
     #[test]
