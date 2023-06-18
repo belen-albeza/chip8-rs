@@ -15,6 +15,19 @@ const SCREEN_HEIGHT: usize = 32;
 const STACK_SIZE: usize = 16;
 const KEYMAP_SIZE: usize = 16;
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct TickStatus {
+    pub is_waiting_for_key: bool,
+}
+
+impl Default for TickStatus {
+    fn default() -> Self {
+        Self {
+            is_waiting_for_key: false,
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub struct CPU<'a> {
     memory: [u8; MEM_SIZE],
@@ -72,40 +85,38 @@ impl<'a> CPU<'a> {
         Ok(())
     }
 
-    pub fn tick(&mut self) -> Result<()> {
+    pub fn tick(&mut self) -> Result<TickStatus> {
         let opcode = (self.read_byte()? as u16) << 8 | self.read_byte()? as u16;
         let instruction = Instruction::try_from(opcode)?;
 
         match instruction {
-            Instruction::NoOp => {}
-            Instruction::ClearScreen => self.exec_clear_screen()?,
-            Instruction::Return => self.exec_return()?,
-            Instruction::Jump(addr) => self.exec_jump(addr)?,
-            Instruction::Call(addr) => self.exec_call(addr)?,
-            Instruction::SkipVxEqual(x, value) => self.exec_skip_vx_if_equal(x, value)?,
-            Instruction::SkipVxNotEqual(x, value) => self.exec_skip_vx_if_not_equal(x, value)?,
-            Instruction::SkipEqual(x, y) => self.exec_skip_if_equal(x, y)?,
-            Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
-            Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
-            Instruction::Set(x, y) => self.exec_set(x, y)?,
-            Instruction::Or(x, y) => self.exec_or(x, y)?,
-            Instruction::And(x, y) => self.exec_and(x, y)?,
-            Instruction::Xor(x, y) => self.exec_xor(x, y)?,
-            Instruction::Add(x, y) => self.exec_add(x, y)?,
-            Instruction::Sub(x, y) => self.exec_sub(x, y)?,
-            Instruction::ShiftRightVx(x) => self.exec_shiftr_vx(x)?,
-            Instruction::SubN(x, y) => self.exec_subn(x, y)?,
-            Instruction::ShiftLeftVx(x) => self.exec_shiftl_vx(x)?,
-            Instruction::SkipNotEqual(x, y) => self.exec_skip_if_not_equal(x, y)?,
-            Instruction::LoadI(x) => self.exec_load_i(x)?,
-            Instruction::JumpOffset(x, addr) => self.exec_jump_offset(x, addr)?,
-            Instruction::Rand(x, value) => self.exec_rand(x, value)?,
-            Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
-            Instruction::SkipIfKey(vx) => self.exec_skip_if_key(vx)?,
-            Instruction::SkipIfNotKey(vx) => self.exec_skip_if_not_key(vx)?,
+            Instruction::NoOp => Ok(TickStatus::default()),
+            Instruction::ClearScreen => self.exec_clear_screen(),
+            Instruction::Return => self.exec_return(),
+            Instruction::Jump(addr) => self.exec_jump(addr),
+            Instruction::Call(addr) => self.exec_call(addr),
+            Instruction::SkipVxEqual(x, value) => self.exec_skip_vx_if_equal(x, value),
+            Instruction::SkipVxNotEqual(x, value) => self.exec_skip_vx_if_not_equal(x, value),
+            Instruction::SkipEqual(x, y) => self.exec_skip_if_equal(x, y),
+            Instruction::LoadVx(x, value) => self.exec_load_vx(x, value),
+            Instruction::AddVx(x, value) => self.exec_add_vx(x, value),
+            Instruction::Set(x, y) => self.exec_set(x, y),
+            Instruction::Or(x, y) => self.exec_or(x, y),
+            Instruction::And(x, y) => self.exec_and(x, y),
+            Instruction::Xor(x, y) => self.exec_xor(x, y),
+            Instruction::Add(x, y) => self.exec_add(x, y),
+            Instruction::Sub(x, y) => self.exec_sub(x, y),
+            Instruction::ShiftRightVx(x) => self.exec_shiftr_vx(x),
+            Instruction::SubN(x, y) => self.exec_subn(x, y),
+            Instruction::ShiftLeftVx(x) => self.exec_shiftl_vx(x),
+            Instruction::SkipNotEqual(x, y) => self.exec_skip_if_not_equal(x, y),
+            Instruction::LoadI(x) => self.exec_load_i(x),
+            Instruction::JumpOffset(x, addr) => self.exec_jump_offset(x, addr),
+            Instruction::Rand(x, value) => self.exec_rand(x, value),
+            Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n),
+            Instruction::SkipIfKey(vx) => self.exec_skip_if_key(vx),
+            Instruction::SkipIfNotKey(vx) => self.exec_skip_if_not_key(vx),
         }
-
-        Ok(())
     }
 
     pub fn visual_buffer(&self) -> &[bool; SCREEN_WIDTH * SCREEN_HEIGHT] {
@@ -164,156 +175,157 @@ impl<'a> CPU<'a> {
         Ok(value)
     }
 
-    fn exec_clear_screen(&mut self) -> Result<()> {
+    fn exec_clear_screen(&mut self) -> Result<TickStatus> {
         self.v_buffer.fill(false);
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_return(&mut self) -> Result<()> {
+    fn exec_return(&mut self) -> Result<TickStatus> {
         let to = self.pop_stack()?;
         self.pc = to;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_jump(&mut self, to: u16) -> Result<()> {
+    fn exec_jump(&mut self, to: u16) -> Result<TickStatus> {
         self.pc = to;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_call(&mut self, to: u16) -> Result<()> {
+    fn exec_call(&mut self, to: u16) -> Result<TickStatus> {
         self.push_stack(self.pc)?;
         self.pc = to;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_vx_if_equal(&mut self, x: u8, value: u8) -> Result<()> {
+    fn exec_skip_vx_if_equal(&mut self, x: u8, value: u8) -> Result<TickStatus> {
         if self.read_register(x)? == value {
             self.pc += 2;
         }
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_vx_if_not_equal(&mut self, x: u8, value: u8) -> Result<()> {
+    fn exec_skip_vx_if_not_equal(&mut self, x: u8, value: u8) -> Result<TickStatus> {
         if self.read_register(x)? != value {
             self.pc += 2;
         }
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_if_equal(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_skip_if_equal(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         if self.read_register(x)? == self.read_register(y)? {
             self.pc += 2;
         }
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_load_vx(&mut self, x: u8, value: u8) -> Result<()> {
-        self.set_register(x, value)
+    fn exec_load_vx(&mut self, x: u8, value: u8) -> Result<TickStatus> {
+        self.set_register(x, value)?;
+        Ok(TickStatus::default())
     }
 
-    fn exec_add_vx(&mut self, x: u8, value: u8) -> Result<()> {
+    fn exec_add_vx(&mut self, x: u8, value: u8) -> Result<TickStatus> {
         let i = self
             .v_registers
             .get_mut(x as usize)
             .ok_or(CPUError::InvalidVRegister(x))?;
         *i += value;
 
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_set(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_set(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let value = self.read_register(y)?;
         self.set_register(x, value)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_or(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_or(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let value = self.read_register(x)? | self.read_register(y)?;
         self.set_register(x, value)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_and(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_and(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let value = self.read_register(x)? & self.read_register(y)?;
         self.set_register(x, value)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_xor(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_xor(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let value = self.read_register(x)? ^ self.read_register(y)?;
         self.set_register(x, value)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_add(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_add(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let (value, carry) = self
             .read_register(x)?
             .overflowing_add(self.read_register(y)?);
         self.set_register(x, value)?;
         self.set_register(0xF, carry as u8)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_sub(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_sub(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let (value, carry) = self
             .read_register(x)?
             .overflowing_sub(self.read_register(y)?);
         self.set_register(x, value)?;
         self.set_register(0xF, !carry as u8)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_shiftr_vx(&mut self, x: u8) -> Result<()> {
+    fn exec_shiftr_vx(&mut self, x: u8) -> Result<TickStatus> {
         let value = self.read_register(x)?;
         let shifted_out = value & 0b_0000_0001;
         self.set_register(x, value >> 1)?;
         self.set_register(0xF, shifted_out)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_subn(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_subn(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let (value, carry) = self
             .read_register(y)?
             .overflowing_sub(self.read_register(x)?);
         self.set_register(x, value)?;
         self.set_register(0xF, !carry as u8)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_shiftl_vx(&mut self, x: u8) -> Result<()> {
+    fn exec_shiftl_vx(&mut self, x: u8) -> Result<TickStatus> {
         let value = self.read_register(x)?;
         let shifted_out = (value & 0b_1000_0000) >> 7;
         self.set_register(x, value << 1)?;
         self.set_register(0xF, shifted_out)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_if_not_equal(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_skip_if_not_equal(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         if self.read_register(x)? != self.read_register(y)? {
             self.pc += 2;
         }
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_load_i(&mut self, value: u16) -> Result<()> {
+    fn exec_load_i(&mut self, value: u16) -> Result<TickStatus> {
         self.i_register = value;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_jump_offset(&mut self, x: u8, addr: u16) -> Result<()> {
+    fn exec_jump_offset(&mut self, x: u8, addr: u16) -> Result<TickStatus> {
         let offset = self.read_register(x)?;
         self.pc = addr + offset as u16;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_rand(&mut self, x: u8, value: u8) -> Result<()> {
+    fn exec_rand(&mut self, x: u8, value: u8) -> Result<TickStatus> {
         let randomized: u8 = self.rng.gen();
         self.set_register(x, randomized & value)?;
 
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_draw_sprite(&mut self, vx: u8, vy: u8, n: u8) -> Result<()> {
+    fn exec_draw_sprite(&mut self, vx: u8, vy: u8, n: u8) -> Result<TickStatus> {
         let sprite = sprites::read_sprite(self.i_register as usize, n as usize, &self.memory)?;
 
         let x = self.read_register(vx)?;
@@ -329,10 +341,10 @@ impl<'a> CPU<'a> {
 
         self.v_registers[0xF] = did_collide as u8;
 
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_if_key(&mut self, vx: u8) -> Result<()> {
+    fn exec_skip_if_key(&mut self, vx: u8) -> Result<TickStatus> {
         let key_idx = self.read_register(vx)?;
         let is_key_pressed = self.read_key(key_idx)?;
 
@@ -340,10 +352,10 @@ impl<'a> CPU<'a> {
             self.pc += 2;
         }
 
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_if_not_key(&mut self, vx: u8) -> Result<()> {
+    fn exec_skip_if_not_key(&mut self, vx: u8) -> Result<TickStatus> {
         let key_idx = self.read_register(vx)?;
         let is_key_pressed = self.read_key(key_idx)?;
 
@@ -351,7 +363,7 @@ impl<'a> CPU<'a> {
             self.pc += 2;
         }
 
-        Ok(())
+        Ok(TickStatus::default())
     }
 }
 

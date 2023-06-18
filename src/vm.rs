@@ -47,7 +47,7 @@ impl<'a> VM<'a> {
                 break;
             }
 
-            self.cpu.tick()?;
+            let _ = self.cpu.tick()?;
             screen.frame(&mut canvas, self.cpu.visual_buffer())?;
 
             ::std::thread::sleep(std::time::Duration::from_millis(
