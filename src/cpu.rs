@@ -39,6 +39,7 @@ pub struct CPU<'a> {
     stack: [u16; STACK_SIZE],
     rng: &'a mut dyn RngCore,
     keypad: [bool; KEYMAP_SIZE],
+    is_waiting_for_key: (bool, usize),
 }
 
 impl<'a> CPU<'a> {
@@ -53,6 +54,7 @@ impl<'a> CPU<'a> {
             stack: [0; STACK_SIZE],
             rng: rng,
             keypad: [false; KEYMAP_SIZE],
+            is_waiting_for_key: (false, 0x0),
         }
     }
 
@@ -82,10 +84,25 @@ impl<'a> CPU<'a> {
             .get_mut(i as usize)
             .ok_or(CPUError::InvalidKey(i))?;
         *key = status;
+
+        let (is_waiting, vx) = self.is_waiting_for_key;
+
+        if is_waiting && status {
+            self.set_register(vx as u8, i as u8)?;
+            self.is_waiting_for_key = (false, 0x00);
+        }
+
         Ok(())
     }
 
     pub fn tick(&mut self) -> Result<TickStatus> {
+        let (is_waiting, _) = self.is_waiting_for_key;
+        if is_waiting {
+            return Ok(TickStatus {
+                is_waiting_for_key: true,
+            });
+        }
+
         let opcode = (self.read_byte()? as u16) << 8 | self.read_byte()? as u16;
         let instruction = Instruction::try_from(opcode)?;
 
@@ -116,6 +133,7 @@ impl<'a> CPU<'a> {
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n),
             Instruction::SkipIfKey(vx) => self.exec_skip_if_key(vx),
             Instruction::SkipIfNotKey(vx) => self.exec_skip_if_not_key(vx),
+            Instruction::WaitForKey(vx) => self.exec_wait_for_key(vx),
         }
     }
 
@@ -365,6 +383,15 @@ impl<'a> CPU<'a> {
 
         Ok(TickStatus::default())
     }
+
+    fn exec_wait_for_key(&mut self, vx: u8) -> Result<TickStatus> {
+        let _ = self.read_register(vx)?; // ensure vx is valid
+        self.is_waiting_for_key = (true, vx as usize);
+
+        Ok(TickStatus {
+            is_waiting_for_key: true,
+        })
+    }
 }
 
 impl fmt::Display for CPU<'_> {
@@ -480,6 +507,22 @@ mod tests {
         let res = cpu.tick();
 
         assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
+    }
+
+    #[test]
+    fn test_tick_does_not_advance_if_waiting_for_key() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[], &mut rng);
+        cpu.is_waiting_for_key = (true, 0xF);
+
+        let res = cpu.tick();
+
+        assert_eq!(
+            res.unwrap(),
+            TickStatus {
+                is_waiting_for_key: true
+            }
+        )
     }
 
     #[test]
@@ -1057,5 +1100,27 @@ mod tests {
 
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_wait_for_key() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF1, 0x0A], &mut rng);
+
+        let res = cpu.tick();
+        assert_eq!(
+            res.unwrap(),
+            TickStatus {
+                is_waiting_for_key: true
+            }
+        );
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.is_waiting_for_key, (true, 0x01));
+
+        // unblocked execution with a key pressed
+        cpu.set_key_status(0xF, true).unwrap();
+
+        assert_eq!(cpu.is_waiting_for_key, (false, 0x00));
+        assert_eq!(cpu.v_registers[0x01], 0x0F);
     }
 }

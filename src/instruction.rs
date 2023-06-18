@@ -54,6 +54,8 @@ pub enum Instruction {
     SkipIfKey(u8),
     // ExA1 -> Skip next if Key(Vx) is not pressed
     SkipIfNotKey(u8),
+    // Fx0A -> Wait for a key to be pressed, and then Vx = Key
+    WaitForKey(u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -97,6 +99,7 @@ impl TryFrom<u16> for Instruction {
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             (0xE, x, 0x9, 0xE) => Ok(Self::SkipIfKey(x)),
             (0xE, x, 0xA, 0x1) => Ok(Self::SkipIfNotKey(x)),
+            (0xF, x, 0x0, 0xA) => Ok(Self::WaitForKey(x)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -196,6 +199,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xE7A1),
             Ok(Instruction::SkipIfNotKey(0x07))
+        );
+        assert_eq!(
+            Instruction::try_from(0xF00A),
+            Ok(Instruction::WaitForKey(0x00))
         );
     }
 }

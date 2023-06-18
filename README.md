@@ -23,6 +23,7 @@ You can quit by closing the window or with the `Esc` key.
 - `invalid.ch8`: this one contains a single, invalid instruction. The emulator should yield an error if you try to run it.
 - `jump.ch8`: this one contains a single, valid instruction that makes the code run indefinitely. You can quite
 - `poker.ch8`: displays the four poker suits. This ROM uses the same instruction set as the famous `IBM Logo.ch8` and it's [a good starter ROM](https://tobiasvl.github.io/blog/write-a-chip-8-emulator/#instructions) if you are implementing your own CHIP-8 emulator.
+- `wait_for_key.ch8`: displays a sprite and waits for a key press. Then displays a different sprite.
 
 ## Implemented opcodes
 
@@ -55,7 +56,7 @@ Standard CHIP-8 instructions:
 - [ ] Ex9E - SKP Vx
 - [ ] ExA1 - SKNP Vx
 - [ ] Fx07 - LD Vx, DT
-- [ ] Fx0A - LD Vx, K
+- [x] Fx0A - LD Vx, K
 - [ ] Fx15 - LD DT, Vx
 - [ ] Fx18 - LD ST, Vx
 - [ ] Fx1E - ADD I, Vx
