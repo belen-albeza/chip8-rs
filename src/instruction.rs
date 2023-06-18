@@ -16,6 +16,8 @@ pub enum Instruction {
     SkipVxEqual(u8, u8),
     // 4xkk -> Skip next if Vx != kk
     SkipVxNotEqual(u8, u8),
+    // 5xy0 -> Skip next if Vx == Vy
+    SkipEqual(u8, u8),
     // 6xkk -> Vx = kk
     LoadVx(u8, u8),
     // 7xkk -> Vx += kk
@@ -66,6 +68,7 @@ impl TryFrom<u16> for Instruction {
             (0x2, _, _, _) => Ok(Self::Call(nnn)),
             (0x3, x, _, _) => Ok(Self::SkipVxEqual(x, kk)),
             (0x4, x, _, _) => Ok(Self::SkipVxNotEqual(x, kk)),
+            (0x5, x, y, 0) => Ok(Self::SkipEqual(x, y)),
             (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
             (0x7, x, _, _) => Ok(Self::AddVx(x, kk)),
             (0x8, x, y, 0x0) => Ok(Self::Set(x, y)),
@@ -108,6 +111,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x4A11),
             Ok(Instruction::SkipVxNotEqual(0xA, 0x11))
+        );
+        assert_eq!(
+            Instruction::try_from(0x5AB0),
+            Ok(Instruction::SkipEqual(0xA, 0xB))
         );
         assert_eq!(
             Instruction::try_from(0x6122),
