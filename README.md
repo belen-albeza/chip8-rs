@@ -2,6 +2,28 @@
 
 CHIP-8 emulator in Rust
 
+## Usage
+
+From binary:
+
+```zsh
+./chip8-rs <FILE>
+```
+
+From source with [Cargo](https://doc.rust-lang.org/cargo/):
+
+```zsh
+cargo run <FILE>
+```
+
+You can quit by closing the window or with the `Esc` key.
+
+### Included ROMs
+
+- `invalid.ch8`: this one contains a single, invalid instruction. The emulator should yield an error if you try to run it.
+- `jump.ch8`: this one contains a single, valid instruction that makes the code run indefinitely. You can quite
+- `poker.ch8`: displays the four poker suits. This ROM uses the same instruction set as the famous `IBM Logo.ch8` and it's [a good starter ROM](https://tobiasvl.github.io/blog/write-a-chip-8-emulator/#instructions) if you are implementing your own CHIP-8 emulator.
+
 ## Implemented opcodes
 
 Standard CHIP-8 instructions:
