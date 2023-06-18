@@ -53,8 +53,8 @@ Standard CHIP-8 instructions:
 - [x] Bnnn - JP V0, addr
 - [x] Cxkk - RND Vx, byte
 - [x] Dxyn - DRW Vx, Vy, nibble
-- [ ] Ex9E - SKP Vx
-- [ ] ExA1 - SKNP Vx
+- [x] Ex9E - SKP Vx
+- [x] ExA1 - SKNP Vx
 - [ ] Fx07 - LD Vx, DT
 - [x] Fx0A - LD Vx, K
 - [ ] Fx15 - LD DT, Vx
