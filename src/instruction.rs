@@ -12,6 +12,12 @@ pub enum Instruction {
     Jump(u16),
     // 2nnn -> Stack[SP] = PC; SP += 1; PC = nnn
     Call(u16),
+    // 3xkk -> Skip next if Vx == kk
+    SkipVxEqual(u8, u8),
+    // 4xkk -> Skip next if Vx != kk
+    SkipVxNotEqual(u8, u8),
+    // 5xy0 -> Skip next if Vx == Vy
+    SkipEqual(u8, u8),
     // 6xkk -> Vx = kk
     LoadVx(u8, u8),
     // 7xkk -> Vx += kk
@@ -34,6 +40,8 @@ pub enum Instruction {
     SubN(u8, u8),
     // 8xyE -> Vx << 1; VF = shifted out bit
     ShiftLeftVx(u8),
+    // 9xy0 -> Skip next if Vx != Vy
+    SkipNotEqual(u8, u8),
     // Annn -> I = nnn
     LoadI(u16),
     // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy); VF = collision
@@ -60,6 +68,9 @@ impl TryFrom<u16> for Instruction {
             (0x0, _, _, _) => Ok(Self::NoOp),
             (0x1, _, _, _) => Ok(Self::Jump(nnn)),
             (0x2, _, _, _) => Ok(Self::Call(nnn)),
+            (0x3, x, _, _) => Ok(Self::SkipVxEqual(x, kk)),
+            (0x4, x, _, _) => Ok(Self::SkipVxNotEqual(x, kk)),
+            (0x5, x, y, 0) => Ok(Self::SkipEqual(x, y)),
             (0x6, x, _, _) => Ok(Self::LoadVx(x, kk)),
             (0x7, x, _, _) => Ok(Self::AddVx(x, kk)),
             (0x8, x, y, 0x0) => Ok(Self::Set(x, y)),
@@ -71,6 +82,7 @@ impl TryFrom<u16> for Instruction {
             (0x8, x, _, 0x6) => Ok(Self::ShiftRightVx(x)),
             (0x8, x, y, 0x7) => Ok(Self::SubN(x, y)),
             (0x8, x, _, 0xE) => Ok(Self::ShiftLeftVx(x)),
+            (0x9, x, y, 0) => Ok(Self::SkipNotEqual(x, y)),
             (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             _ => Err(CPUError::InvalidOpcode(value)),
@@ -95,6 +107,18 @@ mod tests {
         assert_eq!(Instruction::try_from(0x00EE), Ok(Instruction::Return));
         assert_eq!(Instruction::try_from(0x1123), Ok(Instruction::Jump(0x123)));
         assert_eq!(Instruction::try_from(0x2123), Ok(Instruction::Call(0x123)));
+        assert_eq!(
+            Instruction::try_from(0x3A11),
+            Ok(Instruction::SkipVxEqual(0xA, 0x11))
+        );
+        assert_eq!(
+            Instruction::try_from(0x4A11),
+            Ok(Instruction::SkipVxNotEqual(0xA, 0x11))
+        );
+        assert_eq!(
+            Instruction::try_from(0x5AB0),
+            Ok(Instruction::SkipEqual(0xA, 0xB))
+        );
         assert_eq!(
             Instruction::try_from(0x6122),
             Ok(Instruction::LoadVx(0x1, 0x22))
@@ -135,6 +159,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8ABE),
             Ok(Instruction::ShiftLeftVx(0xA))
+        );
+        assert_eq!(
+            Instruction::try_from(0x9AB0),
+            Ok(Instruction::SkipNotEqual(0xA, 0xB))
         );
         assert_eq!(Instruction::try_from(0xABCD), Ok(Instruction::LoadI(0xBCD)));
         assert_eq!(
