@@ -102,6 +102,7 @@ impl<'a> CPU<'a> {
             Instruction::Rand(x, value) => self.exec_rand(x, value)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
             Instruction::SkipIfKey(vx) => self.exec_skip_if_key(vx)?,
+            Instruction::SkipIfNotKey(vx) => self.exec_skip_if_not_key(vx)?,
         }
 
         Ok(())
@@ -336,6 +337,17 @@ impl<'a> CPU<'a> {
         let is_key_pressed = self.read_key(key_idx)?;
 
         if is_key_pressed {
+            self.pc += 2;
+        }
+
+        Ok(())
+    }
+
+    fn exec_skip_if_not_key(&mut self, vx: u8) -> Result<()> {
+        let key_idx = self.read_register(vx)?;
+        let is_key_pressed = self.read_key(key_idx)?;
+
+        if !is_key_pressed {
             self.pc += 2;
         }
 
@@ -1007,5 +1019,31 @@ mod tests {
         let res = cpu.tick();
 
         assert_eq!(res.unwrap_err(), CPUError::InvalidKey(0x10));
+    }
+
+    #[test]
+    fn test_skip_if_not_key_skips_when_key_is_not_pressed() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0xA1], &mut rng);
+        cpu.v_registers[0x0] = 0x07;
+        cpu.keypad[0x07] = false;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_skip_if_not_key_does_not_skip_when_key_is_pressed() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0xA1], &mut rng);
+        cpu.v_registers[0x0] = 0x07;
+        cpu.keypad[0x07] = true;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
     }
 }
