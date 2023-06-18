@@ -25,7 +25,7 @@ pub struct CPU<'a> {
     v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
     stack: [u16; STACK_SIZE],
     rng: &'a mut dyn RngCore,
-    keymap: [bool; KEYMAP_SIZE],
+    keypad: [bool; KEYMAP_SIZE],
 }
 
 impl<'a> CPU<'a> {
@@ -39,7 +39,7 @@ impl<'a> CPU<'a> {
             v_buffer: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
             stack: [0; STACK_SIZE],
             rng: rng,
-            keymap: [false; KEYMAP_SIZE],
+            keypad: [false; KEYMAP_SIZE],
         }
     }
 
@@ -60,12 +60,12 @@ impl<'a> CPU<'a> {
         self.i_register = 0;
         self.v_buffer = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
         self.stack = [0; STACK_SIZE];
-        self.keymap = [false; KEYMAP_SIZE];
+        self.keypad = [false; KEYMAP_SIZE];
     }
 
     pub fn set_key_status(&mut self, i: usize, status: bool) -> Result<()> {
         let key = self
-            .keymap
+            .keypad
             .get_mut(i as usize)
             .ok_or(CPUError::InvalidKey(i))?;
         *key = status;
@@ -367,7 +367,7 @@ mod tests {
         assert_eq!(cpu.i_register, 0);
         assert_eq!(cpu.sp, 0);
         assert_eq!(cpu.stack, [0; 16]);
-        assert_eq!(cpu.keymap, [false; 16]);
+        assert_eq!(cpu.keypad, [false; 16]);
     }
 
     #[test]
@@ -403,11 +403,11 @@ mod tests {
         let res_down = cpu.set_key_status(0xF, true);
 
         assert!(res_down.is_ok());
-        assert_eq!(cpu.keymap[0xF], true);
+        assert_eq!(cpu.keypad[0xF], true);
 
         let res_up = cpu.set_key_status(0xF, false);
         assert!(res_up.is_ok());
-        assert_eq!(cpu.keymap[0xF], false);
+        assert_eq!(cpu.keypad[0xF], false);
     }
 
     #[test]
