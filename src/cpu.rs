@@ -144,6 +144,7 @@ impl<'a> CPU<'a> {
             Instruction::SkipIfNotKey(vx) => self.exec_skip_if_not_key(vx),
             Instruction::LoadDelay(vx) => self.exec_load_delay(vx),
             Instruction::WaitForKey(vx) => self.exec_wait_for_key(vx),
+            Instruction::SetDelay(vx) => self.exec_set_delay(vx),
         }
     }
 
@@ -406,6 +407,11 @@ impl<'a> CPU<'a> {
         Ok(TickStatus {
             is_waiting_for_key: true,
         })
+    }
+
+    fn exec_set_delay(&mut self, vx: u8) -> Result<TickStatus> {
+        self.delay_timer = self.read_register(vx)?;
+        Ok(TickStatus::default())
     }
 }
 
@@ -1167,5 +1173,18 @@ mod tests {
 
         assert_eq!(cpu.is_waiting_for_key, (false, 0x00));
         assert_eq!(cpu.v_registers[0x01], 0x0F);
+    }
+
+    #[test]
+    fn test_set_delay() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x15], &mut rng);
+        cpu.v_registers[0x0] = 0xFA;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.delay_timer, 0xFA);
     }
 }
