@@ -13,6 +13,7 @@ const V_REGISTERS_SIZE: usize = 16;
 const SCREEN_WIDTH: usize = 64;
 const SCREEN_HEIGHT: usize = 32;
 const STACK_SIZE: usize = 16;
+const KEYMAP_SIZE: usize = 16;
 
 #[allow(dead_code)]
 pub struct CPU<'a> {
@@ -24,6 +25,7 @@ pub struct CPU<'a> {
     v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
     stack: [u16; STACK_SIZE],
     rng: &'a mut dyn RngCore,
+    keymap: [bool; KEYMAP_SIZE],
 }
 
 impl<'a> CPU<'a> {
@@ -37,6 +39,7 @@ impl<'a> CPU<'a> {
             v_buffer: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
             stack: [0; STACK_SIZE],
             rng: rng,
+            keymap: [false; KEYMAP_SIZE],
         }
     }
 
@@ -56,7 +59,17 @@ impl<'a> CPU<'a> {
         self.v_registers = [0; V_REGISTERS_SIZE];
         self.i_register = 0;
         self.v_buffer = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
-        self.stack = [0; STACK_SIZE]
+        self.stack = [0; STACK_SIZE];
+        self.keymap = [false; KEYMAP_SIZE];
+    }
+
+    pub fn set_key_status(&mut self, i: usize, status: bool) -> Result<()> {
+        let key = self
+            .keymap
+            .get_mut(i as usize)
+            .ok_or(CPUError::InvalidKey(i))?;
+        *key = status;
+        Ok(())
     }
 
     pub fn tick(&mut self) -> Result<()> {
@@ -354,6 +367,7 @@ mod tests {
         assert_eq!(cpu.i_register, 0);
         assert_eq!(cpu.sp, 0);
         assert_eq!(cpu.stack, [0; 16]);
+        assert_eq!(cpu.keymap, [false; 16]);
     }
 
     #[test]
@@ -379,6 +393,30 @@ mod tests {
         let res = cpu.load_rom(&rom);
 
         assert_eq!(res.unwrap_err(), CPUError::MemoryOverflow);
+    }
+
+    #[test]
+    fn test_set_key_status() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = CPU::new(&mut rng);
+
+        let res_down = cpu.set_key_status(0xF, true);
+
+        assert!(res_down.is_ok());
+        assert_eq!(cpu.keymap[0xF], true);
+
+        let res_up = cpu.set_key_status(0xF, false);
+        assert!(res_up.is_ok());
+        assert_eq!(cpu.keymap[0xF], false);
+    }
+
+    #[test]
+    fn test_set_key_status_returns_err() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = CPU::new(&mut rng);
+
+        let res = cpu.set_key_status(0x10, true);
+        assert_eq!(res.unwrap_err(), CPUError::InvalidKey(0x10));
     }
 
     #[test]

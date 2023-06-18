@@ -78,6 +78,7 @@ pub enum CPUError {
     InvalidOpcode(u16),
     InvalidAddress(u16),
     InvalidVRegister(u8),
+    InvalidKey(usize),
 }
 
 impl fmt::Display for CPUError {
@@ -85,6 +86,7 @@ impl fmt::Display for CPUError {
         match self {
             Self::MemoryOverflow => write!(f, "Memory overflow"),
             Self::StackOverflow => write!(f, "Stack overflow"),
+            Self::InvalidKey(key) => write!(f, "Invalid key: {}", key),
             Self::InvalidOpcode(op) => write!(f, "Invalid opcode: {:#04X}", op),
             Self::InvalidAddress(addr) => write!(f, "Invalid memory address: {:#04X}", addr),
             Self::InvalidVRegister(i) => write!(f, "Invalid V-Register: {:#01X}", i),
