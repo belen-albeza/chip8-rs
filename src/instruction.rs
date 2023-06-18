@@ -60,6 +60,8 @@ pub enum Instruction {
     WaitForKey(u8),
     // Fx15 -> DelayTimer = Vx
     SetDelay(u8),
+    // Fx18 -> SoundTimer = Vx
+    SetSound(u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -106,6 +108,7 @@ impl TryFrom<u16> for Instruction {
             (0xF, x, 0x0, 0x7) => Ok(Self::LoadDelay(x)),
             (0xF, x, 0x0, 0xA) => Ok(Self::WaitForKey(x)),
             (0xF, x, 0x1, 0x5) => Ok(Self::SetDelay(x)),
+            (0xF, x, 0x1, 0x8) => Ok(Self::SetSound(x)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -217,6 +220,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xF015),
             Ok(Instruction::SetDelay(0x00))
+        );
+        assert_eq!(
+            Instruction::try_from(0xF018),
+            Ok(Instruction::SetSound(0x00))
         );
     }
 }

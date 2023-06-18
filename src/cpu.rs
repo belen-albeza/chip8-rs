@@ -18,12 +18,14 @@ const KEYMAP_SIZE: usize = 16;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct TickStatus {
     pub is_waiting_for_key: bool,
+    pub is_buzzing: bool,
 }
 
 impl Default for TickStatus {
     fn default() -> Self {
         Self {
             is_waiting_for_key: false,
+            is_buzzing: false,
         }
     }
 }
@@ -39,8 +41,9 @@ pub struct CPU<'a> {
     stack: [u16; STACK_SIZE],
     rng: &'a mut dyn RngCore,
     keypad: [bool; KEYMAP_SIZE],
-    is_waiting_for_key: (bool, usize),
     delay_timer: u8,
+    sound_timer: u8,
+    is_waiting_for_key: (bool, usize),
 }
 
 impl<'a> CPU<'a> {
@@ -56,6 +59,7 @@ impl<'a> CPU<'a> {
             rng: rng,
             keypad: [false; KEYMAP_SIZE],
             delay_timer: 0,
+            sound_timer: 0,
             is_waiting_for_key: (false, 0x0),
         }
     }
@@ -78,8 +82,9 @@ impl<'a> CPU<'a> {
         self.v_buffer = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
         self.stack = [0; STACK_SIZE];
         self.keypad = [false; KEYMAP_SIZE];
-        self.is_waiting_for_key = (false, 0x0);
         self.delay_timer = 0;
+        self.sound_timer = 0;
+        self.is_waiting_for_key = (false, 0x0);
     }
 
     pub fn set_key_status(&mut self, i: usize, status: bool) -> Result<()> {
@@ -103,19 +108,21 @@ impl<'a> CPU<'a> {
         // update internal timers
         // TODO: decouple 1 cpu tick = 1 decrement
         self.delay_timer = self.delay_timer.saturating_sub(1);
+        self.sound_timer = self.sound_timer.saturating_sub(1);
 
         // skip execution of instructions if we are waiting for a key press
         let (is_waiting, _) = self.is_waiting_for_key;
         if is_waiting {
             return Ok(TickStatus {
                 is_waiting_for_key: true,
+                is_buzzing: self.sound_timer > 0,
             });
         }
 
         let opcode = (self.read_byte()? as u16) << 8 | self.read_byte()? as u16;
         let instruction = Instruction::try_from(opcode)?;
 
-        match instruction {
+        let mut status = match instruction {
             Instruction::NoOp => Ok(TickStatus::default()),
             Instruction::ClearScreen => self.exec_clear_screen(),
             Instruction::Return => self.exec_return(),
@@ -145,7 +152,11 @@ impl<'a> CPU<'a> {
             Instruction::LoadDelay(vx) => self.exec_load_delay(vx),
             Instruction::WaitForKey(vx) => self.exec_wait_for_key(vx),
             Instruction::SetDelay(vx) => self.exec_set_delay(vx),
-        }
+            Instruction::SetSound(vx) => self.exec_set_sound(vx),
+        }?;
+
+        status.is_buzzing = self.sound_timer > 0;
+        Ok(status)
     }
 
     pub fn visual_buffer(&self) -> &[bool; SCREEN_WIDTH * SCREEN_HEIGHT] {
@@ -404,13 +415,19 @@ impl<'a> CPU<'a> {
         let _ = self.read_register(vx)?; // ensure vx is valid
         self.is_waiting_for_key = (true, vx as usize);
 
-        Ok(TickStatus {
-            is_waiting_for_key: true,
-        })
+        let mut status = TickStatus::default();
+        status.is_waiting_for_key = true;
+
+        Ok(status)
     }
 
     fn exec_set_delay(&mut self, vx: u8) -> Result<TickStatus> {
         self.delay_timer = self.read_register(vx)?;
+        Ok(TickStatus::default())
+    }
+
+    fn exec_set_sound(&mut self, vx: u8) -> Result<TickStatus> {
+        self.sound_timer = self.read_register(vx)?;
         Ok(TickStatus::default())
     }
 }
@@ -446,6 +463,10 @@ mod tests {
         let mut cpu = CPU::new(rng);
         cpu.load_rom(rom).expect("Couldn't load ROM");
         cpu
+    }
+
+    fn any_cpu_with_noop<'a>(rng: &'a mut impl RngCore) -> CPU<'a> {
+        any_cpu_with_rom(&[0x01, 0x23], rng)
     }
 
     #[test]
@@ -542,7 +563,8 @@ mod tests {
         assert_eq!(
             res.unwrap(),
             TickStatus {
-                is_waiting_for_key: true
+                is_waiting_for_key: true,
+                is_buzzing: false,
             }
         )
     }
@@ -553,14 +575,51 @@ mod tests {
         let mut cpu = any_cpu_with_rom(&[], &mut rng);
         cpu.is_waiting_for_key = (true, 0x0);
         cpu.delay_timer = 1;
+        cpu.sound_timer = 1;
 
         let res_1st_tick = cpu.tick();
         assert!(res_1st_tick.is_ok());
         assert_eq!(cpu.delay_timer, 0);
+        assert_eq!(cpu.sound_timer, 0);
 
         let res_2nd_tick = cpu.tick();
         assert!(res_2nd_tick.is_ok());
         assert_eq!(cpu.delay_timer, 0); // no overflow
+        assert_eq!(cpu.sound_timer, 0); // no overflow
+    }
+
+    #[test]
+    fn test_tick_returns_not_buzzing_when_sound_timer_is_zero() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_noop(&mut rng); // no op
+        cpu.sound_timer = 0;
+
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap().is_buzzing, false);
+    }
+
+    #[test]
+    fn test_tick_returns_is_buzzing_when_sound_timer_is_greater_than_zero() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_noop(&mut rng); // no op
+        cpu.sound_timer = 0x20;
+
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap().is_buzzing, true);
+    }
+
+    #[test]
+    fn test_tick_returns_is_buzzing_despite_waiting_for_key() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[], &mut rng);
+        cpu.sound_timer = 0x20;
+        cpu.is_waiting_for_key = (true, 0x0);
+
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap().is_buzzing, true);
     }
 
     #[test]
@@ -1162,7 +1221,8 @@ mod tests {
         assert_eq!(
             res.unwrap(),
             TickStatus {
-                is_waiting_for_key: true
+                is_waiting_for_key: true,
+                is_buzzing: false,
             }
         );
         assert_eq!(cpu.pc, 0x202);
@@ -1186,5 +1246,18 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x202);
         assert_eq!(cpu.delay_timer, 0xFA);
+    }
+
+    #[test]
+    fn test_set_sound() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x18], &mut rng);
+        cpu.v_registers[0x0] = 0xFA;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.sound_timer, 0xFA);
     }
 }
