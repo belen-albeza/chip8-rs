@@ -57,6 +57,7 @@ impl CPU {
             Instruction::Jump(addr) => self.exec_jump(addr)?,
             Instruction::Call(addr) => self.exec_call(addr)?,
             Instruction::SkipVxEqual(x, value) => self.exec_skip_vx_if_equal(x, value)?,
+            Instruction::SkipVxNotEqual(x, value) => self.exec_skip_vx_if_not_equal(x, value)?,
             Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
             Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
             Instruction::Set(x, y) => self.exec_set(x, y)?,
@@ -148,6 +149,13 @@ impl CPU {
 
     fn exec_skip_vx_if_equal(&mut self, x: u8, value: u8) -> Result<()> {
         if self.read_register(x)? == value {
+            self.pc += 2;
+        }
+        Ok(())
+    }
+
+    fn exec_skip_vx_if_not_equal(&mut self, x: u8, value: u8) -> Result<()> {
+        if self.read_register(x)? != value {
             self.pc += 2;
         }
         Ok(())
@@ -422,6 +430,28 @@ mod tests {
     fn test_skip_vx_if_equal_does_not_skip() {
         let mut cpu = any_cpu_with_rom(&[0x30, 0x42]);
         cpu.v_registers[0] = 0x00;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_skip_vx_if_not_equal_skips() {
+        let mut cpu = any_cpu_with_rom(&[0x40, 0x42]);
+        cpu.v_registers[0] = 0x00;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_skip_vx_if_not_equal_does_not_skip() {
+        let mut cpu = any_cpu_with_rom(&[0x40, 0x42]);
+        cpu.v_registers[0] = 0x42;
 
         let res = cpu.tick();
 
