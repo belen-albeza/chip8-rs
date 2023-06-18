@@ -45,7 +45,7 @@ impl<'a> VM<'a> {
         let mut screen = screen::Screen::try_from(&texture_creator)?;
         let mut event_pump = sdl_context.event_pump().map_err(to_sdl_err)?;
 
-        let mut buzzer = Audio::new(&sdl_context)?;
+        let mut buzzer = Audio::new(&sdl_context, 1.0)?;
 
         let mut frames = -1;
 
