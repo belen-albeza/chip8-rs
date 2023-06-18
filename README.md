@@ -33,9 +33,9 @@ Standard CHIP-8 instructions:
 - [x] 00EE - RET
 - [x] 1nnn - JP addr
 - [x] 2nnn - CALL addr
-- [ ] 3xkk - SE Vx, byte
-- [ ] 4xkk - SNE Vx, byte
-- [ ] 5xy0 - SE Vx, Vy
+- [x] 3xkk - SE Vx, byte
+- [x] 4xkk - SNE Vx, byte
+- [x] 5xy0 - SE Vx, Vy
 - [x] 6xkk - LD Vx, byte
 - [x] 7xkk - ADD Vx, byte
 - [x] 8xy0 - LD Vx, Vy
@@ -47,7 +47,7 @@ Standard CHIP-8 instructions:
 - [x] 8xy6 - SHR Vx {, Vy}
 - [x] 8xy7 - SUBN Vx, Vy
 - [x] 8xyE - SHL Vx {, Vy}
-- [ ] 9xy0 - SNE Vx, Vy
+- [x] 9xy0 - SNE Vx, Vy
 - [x] Annn - LD I, addr
 - [ ] Bnnn - JP V0, addr
 - [ ] Cxkk - RND Vx, byte

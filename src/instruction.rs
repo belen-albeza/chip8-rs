@@ -40,6 +40,8 @@ pub enum Instruction {
     SubN(u8, u8),
     // 8xyE -> Vx << 1; VF = shifted out bit
     ShiftLeftVx(u8),
+    // 9xy0 -> Skip next if Vx != Vy
+    SkipNotEqual(u8, u8),
     // Annn -> I = nnn
     LoadI(u16),
     // Dxyn -> Draw n-byte sprite starting at I at (Vx,Vy); VF = collision
@@ -80,6 +82,7 @@ impl TryFrom<u16> for Instruction {
             (0x8, x, _, 0x6) => Ok(Self::ShiftRightVx(x)),
             (0x8, x, y, 0x7) => Ok(Self::SubN(x, y)),
             (0x8, x, _, 0xE) => Ok(Self::ShiftLeftVx(x)),
+            (0x9, x, y, 0) => Ok(Self::SkipNotEqual(x, y)),
             (0xA, _, _, _) => Ok(Self::LoadI(nnn)),
             (0xD, x, y, n) => Ok(Self::DrawSprite(x, y, n)),
             _ => Err(CPUError::InvalidOpcode(value)),
@@ -156,6 +159,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8ABE),
             Ok(Instruction::ShiftLeftVx(0xA))
+        );
+        assert_eq!(
+            Instruction::try_from(0x9AB0),
+            Ok(Instruction::SkipNotEqual(0xA, 0xB))
         );
         assert_eq!(Instruction::try_from(0xABCD), Ok(Instruction::LoadI(0xBCD)));
         assert_eq!(

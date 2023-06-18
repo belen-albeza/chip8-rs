@@ -70,6 +70,7 @@ impl CPU {
             Instruction::ShiftRightVx(x) => self.exec_shiftr_vx(x)?,
             Instruction::SubN(x, y) => self.exec_subn(x, y)?,
             Instruction::ShiftLeftVx(x) => self.exec_shiftl_vx(x)?,
+            Instruction::SkipNotEqual(x, y) => self.exec_skip_if_not_equal(x, y)?,
             Instruction::LoadI(x) => self.exec_load_i(x)?,
             Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
         }
@@ -247,6 +248,13 @@ impl CPU {
         let shifted_out = (value & 0b_1000_0000) >> 7;
         self.set_register(x, value << 1)?;
         self.set_register(0xF, shifted_out)?;
+        Ok(())
+    }
+
+    fn exec_skip_if_not_equal(&mut self, x: u8, y: u8) -> Result<()> {
+        if self.read_register(x)? != self.read_register(y)? {
+            self.pc += 2;
+        }
         Ok(())
     }
 
@@ -709,6 +717,30 @@ mod tests {
         assert_eq!(cpu.pc, 0x202);
         assert_eq!(cpu.v_registers[0x0], 0b_1001_1110);
         assert_eq!(cpu.v_registers[0xF], 0x01);
+    }
+
+    #[test]
+    fn test_skip_if_not_equal_skips() {
+        let mut cpu = any_cpu_with_rom(&[0x90, 0x10]);
+        cpu.v_registers[0] = 0xFF;
+        cpu.v_registers[1] = 0x0F;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_skip_if_not_equal_does_not_skip() {
+        let mut cpu = any_cpu_with_rom(&[0x90, 0x10]);
+        cpu.v_registers[0] = 0xFF;
+        cpu.v_registers[1] = 0xFF;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
     }
 
     #[test]
