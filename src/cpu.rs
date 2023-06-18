@@ -13,6 +13,20 @@ const V_REGISTERS_SIZE: usize = 16;
 const SCREEN_WIDTH: usize = 64;
 const SCREEN_HEIGHT: usize = 32;
 const STACK_SIZE: usize = 16;
+const KEYMAP_SIZE: usize = 16;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct TickStatus {
+    pub is_waiting_for_key: bool,
+}
+
+impl Default for TickStatus {
+    fn default() -> Self {
+        Self {
+            is_waiting_for_key: false,
+        }
+    }
+}
 
 #[allow(dead_code)]
 pub struct CPU<'a> {
@@ -24,6 +38,8 @@ pub struct CPU<'a> {
     v_buffer: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
     stack: [u16; STACK_SIZE],
     rng: &'a mut dyn RngCore,
+    keypad: [bool; KEYMAP_SIZE],
+    is_waiting_for_key: (bool, usize),
 }
 
 impl<'a> CPU<'a> {
@@ -37,6 +53,8 @@ impl<'a> CPU<'a> {
             v_buffer: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
             stack: [0; STACK_SIZE],
             rng: rng,
+            keypad: [false; KEYMAP_SIZE],
+            is_waiting_for_key: (false, 0x0),
         }
     }
 
@@ -56,41 +74,67 @@ impl<'a> CPU<'a> {
         self.v_registers = [0; V_REGISTERS_SIZE];
         self.i_register = 0;
         self.v_buffer = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
-        self.stack = [0; STACK_SIZE]
+        self.stack = [0; STACK_SIZE];
+        self.keypad = [false; KEYMAP_SIZE];
     }
 
-    pub fn tick(&mut self) -> Result<()> {
+    pub fn set_key_status(&mut self, i: usize, status: bool) -> Result<()> {
+        let key = self
+            .keypad
+            .get_mut(i as usize)
+            .ok_or(CPUError::InvalidKey(i))?;
+        *key = status;
+
+        let (is_waiting, vx) = self.is_waiting_for_key;
+
+        if is_waiting && status {
+            self.set_register(vx as u8, i as u8)?;
+            self.is_waiting_for_key = (false, 0x00);
+        }
+
+        Ok(())
+    }
+
+    pub fn tick(&mut self) -> Result<TickStatus> {
+        let (is_waiting, _) = self.is_waiting_for_key;
+        if is_waiting {
+            return Ok(TickStatus {
+                is_waiting_for_key: true,
+            });
+        }
+
         let opcode = (self.read_byte()? as u16) << 8 | self.read_byte()? as u16;
         let instruction = Instruction::try_from(opcode)?;
 
         match instruction {
-            Instruction::NoOp => {}
-            Instruction::ClearScreen => self.exec_clear_screen()?,
-            Instruction::Return => self.exec_return()?,
-            Instruction::Jump(addr) => self.exec_jump(addr)?,
-            Instruction::Call(addr) => self.exec_call(addr)?,
-            Instruction::SkipVxEqual(x, value) => self.exec_skip_vx_if_equal(x, value)?,
-            Instruction::SkipVxNotEqual(x, value) => self.exec_skip_vx_if_not_equal(x, value)?,
-            Instruction::SkipEqual(x, y) => self.exec_skip_if_equal(x, y)?,
-            Instruction::LoadVx(x, value) => self.exec_load_vx(x, value)?,
-            Instruction::AddVx(x, value) => self.exec_add_vx(x, value)?,
-            Instruction::Set(x, y) => self.exec_set(x, y)?,
-            Instruction::Or(x, y) => self.exec_or(x, y)?,
-            Instruction::And(x, y) => self.exec_and(x, y)?,
-            Instruction::Xor(x, y) => self.exec_xor(x, y)?,
-            Instruction::Add(x, y) => self.exec_add(x, y)?,
-            Instruction::Sub(x, y) => self.exec_sub(x, y)?,
-            Instruction::ShiftRightVx(x) => self.exec_shiftr_vx(x)?,
-            Instruction::SubN(x, y) => self.exec_subn(x, y)?,
-            Instruction::ShiftLeftVx(x) => self.exec_shiftl_vx(x)?,
-            Instruction::SkipNotEqual(x, y) => self.exec_skip_if_not_equal(x, y)?,
-            Instruction::LoadI(x) => self.exec_load_i(x)?,
-            Instruction::JumpOffset(x, addr) => self.exec_jump_offset(x, addr)?,
-            Instruction::Rand(x, value) => self.exec_rand(x, value)?,
-            Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n)?,
+            Instruction::NoOp => Ok(TickStatus::default()),
+            Instruction::ClearScreen => self.exec_clear_screen(),
+            Instruction::Return => self.exec_return(),
+            Instruction::Jump(addr) => self.exec_jump(addr),
+            Instruction::Call(addr) => self.exec_call(addr),
+            Instruction::SkipVxEqual(x, value) => self.exec_skip_vx_if_equal(x, value),
+            Instruction::SkipVxNotEqual(x, value) => self.exec_skip_vx_if_not_equal(x, value),
+            Instruction::SkipEqual(x, y) => self.exec_skip_if_equal(x, y),
+            Instruction::LoadVx(x, value) => self.exec_load_vx(x, value),
+            Instruction::AddVx(x, value) => self.exec_add_vx(x, value),
+            Instruction::Set(x, y) => self.exec_set(x, y),
+            Instruction::Or(x, y) => self.exec_or(x, y),
+            Instruction::And(x, y) => self.exec_and(x, y),
+            Instruction::Xor(x, y) => self.exec_xor(x, y),
+            Instruction::Add(x, y) => self.exec_add(x, y),
+            Instruction::Sub(x, y) => self.exec_sub(x, y),
+            Instruction::ShiftRightVx(x) => self.exec_shiftr_vx(x),
+            Instruction::SubN(x, y) => self.exec_subn(x, y),
+            Instruction::ShiftLeftVx(x) => self.exec_shiftl_vx(x),
+            Instruction::SkipNotEqual(x, y) => self.exec_skip_if_not_equal(x, y),
+            Instruction::LoadI(x) => self.exec_load_i(x),
+            Instruction::JumpOffset(x, addr) => self.exec_jump_offset(x, addr),
+            Instruction::Rand(x, value) => self.exec_rand(x, value),
+            Instruction::DrawSprite(x, y, n) => self.exec_draw_sprite(x, y, n),
+            Instruction::SkipIfKey(vx) => self.exec_skip_if_key(vx),
+            Instruction::SkipIfNotKey(vx) => self.exec_skip_if_not_key(vx),
+            Instruction::WaitForKey(vx) => self.exec_wait_for_key(vx),
         }
-
-        Ok(())
     }
 
     pub fn visual_buffer(&self) -> &[bool; SCREEN_WIDTH * SCREEN_HEIGHT] {
@@ -122,6 +166,13 @@ impl<'a> CPU<'a> {
         Ok(())
     }
 
+    fn read_key(&self, i: u8) -> Result<bool> {
+        self.keypad
+            .get(i as usize)
+            .ok_or(CPUError::InvalidKey(i as usize))
+            .copied()
+    }
+
     fn push_stack(&mut self, value: u16) -> Result<()> {
         let i = self.stack.get_mut(self.sp).ok_or(CPUError::StackOverflow)?;
         *i = value;
@@ -142,156 +193,157 @@ impl<'a> CPU<'a> {
         Ok(value)
     }
 
-    fn exec_clear_screen(&mut self) -> Result<()> {
+    fn exec_clear_screen(&mut self) -> Result<TickStatus> {
         self.v_buffer.fill(false);
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_return(&mut self) -> Result<()> {
+    fn exec_return(&mut self) -> Result<TickStatus> {
         let to = self.pop_stack()?;
         self.pc = to;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_jump(&mut self, to: u16) -> Result<()> {
+    fn exec_jump(&mut self, to: u16) -> Result<TickStatus> {
         self.pc = to;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_call(&mut self, to: u16) -> Result<()> {
+    fn exec_call(&mut self, to: u16) -> Result<TickStatus> {
         self.push_stack(self.pc)?;
         self.pc = to;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_vx_if_equal(&mut self, x: u8, value: u8) -> Result<()> {
+    fn exec_skip_vx_if_equal(&mut self, x: u8, value: u8) -> Result<TickStatus> {
         if self.read_register(x)? == value {
             self.pc += 2;
         }
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_vx_if_not_equal(&mut self, x: u8, value: u8) -> Result<()> {
+    fn exec_skip_vx_if_not_equal(&mut self, x: u8, value: u8) -> Result<TickStatus> {
         if self.read_register(x)? != value {
             self.pc += 2;
         }
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_if_equal(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_skip_if_equal(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         if self.read_register(x)? == self.read_register(y)? {
             self.pc += 2;
         }
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_load_vx(&mut self, x: u8, value: u8) -> Result<()> {
-        self.set_register(x, value)
+    fn exec_load_vx(&mut self, x: u8, value: u8) -> Result<TickStatus> {
+        self.set_register(x, value)?;
+        Ok(TickStatus::default())
     }
 
-    fn exec_add_vx(&mut self, x: u8, value: u8) -> Result<()> {
+    fn exec_add_vx(&mut self, x: u8, value: u8) -> Result<TickStatus> {
         let i = self
             .v_registers
             .get_mut(x as usize)
             .ok_or(CPUError::InvalidVRegister(x))?;
         *i += value;
 
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_set(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_set(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let value = self.read_register(y)?;
         self.set_register(x, value)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_or(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_or(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let value = self.read_register(x)? | self.read_register(y)?;
         self.set_register(x, value)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_and(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_and(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let value = self.read_register(x)? & self.read_register(y)?;
         self.set_register(x, value)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_xor(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_xor(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let value = self.read_register(x)? ^ self.read_register(y)?;
         self.set_register(x, value)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_add(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_add(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let (value, carry) = self
             .read_register(x)?
             .overflowing_add(self.read_register(y)?);
         self.set_register(x, value)?;
         self.set_register(0xF, carry as u8)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_sub(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_sub(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let (value, carry) = self
             .read_register(x)?
             .overflowing_sub(self.read_register(y)?);
         self.set_register(x, value)?;
         self.set_register(0xF, !carry as u8)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_shiftr_vx(&mut self, x: u8) -> Result<()> {
+    fn exec_shiftr_vx(&mut self, x: u8) -> Result<TickStatus> {
         let value = self.read_register(x)?;
         let shifted_out = value & 0b_0000_0001;
         self.set_register(x, value >> 1)?;
         self.set_register(0xF, shifted_out)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_subn(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_subn(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         let (value, carry) = self
             .read_register(y)?
             .overflowing_sub(self.read_register(x)?);
         self.set_register(x, value)?;
         self.set_register(0xF, !carry as u8)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_shiftl_vx(&mut self, x: u8) -> Result<()> {
+    fn exec_shiftl_vx(&mut self, x: u8) -> Result<TickStatus> {
         let value = self.read_register(x)?;
         let shifted_out = (value & 0b_1000_0000) >> 7;
         self.set_register(x, value << 1)?;
         self.set_register(0xF, shifted_out)?;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_skip_if_not_equal(&mut self, x: u8, y: u8) -> Result<()> {
+    fn exec_skip_if_not_equal(&mut self, x: u8, y: u8) -> Result<TickStatus> {
         if self.read_register(x)? != self.read_register(y)? {
             self.pc += 2;
         }
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_load_i(&mut self, value: u16) -> Result<()> {
+    fn exec_load_i(&mut self, value: u16) -> Result<TickStatus> {
         self.i_register = value;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_jump_offset(&mut self, x: u8, addr: u16) -> Result<()> {
+    fn exec_jump_offset(&mut self, x: u8, addr: u16) -> Result<TickStatus> {
         let offset = self.read_register(x)?;
         self.pc = addr + offset as u16;
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_rand(&mut self, x: u8, value: u8) -> Result<()> {
+    fn exec_rand(&mut self, x: u8, value: u8) -> Result<TickStatus> {
         let randomized: u8 = self.rng.gen();
         self.set_register(x, randomized & value)?;
 
-        Ok(())
+        Ok(TickStatus::default())
     }
 
-    fn exec_draw_sprite(&mut self, vx: u8, vy: u8, n: u8) -> Result<()> {
+    fn exec_draw_sprite(&mut self, vx: u8, vy: u8, n: u8) -> Result<TickStatus> {
         let sprite = sprites::read_sprite(self.i_register as usize, n as usize, &self.memory)?;
 
         let x = self.read_register(vx)?;
@@ -307,7 +359,38 @@ impl<'a> CPU<'a> {
 
         self.v_registers[0xF] = did_collide as u8;
 
-        Ok(())
+        Ok(TickStatus::default())
+    }
+
+    fn exec_skip_if_key(&mut self, vx: u8) -> Result<TickStatus> {
+        let key_idx = self.read_register(vx)?;
+        let is_key_pressed = self.read_key(key_idx)?;
+
+        if is_key_pressed {
+            self.pc += 2;
+        }
+
+        Ok(TickStatus::default())
+    }
+
+    fn exec_skip_if_not_key(&mut self, vx: u8) -> Result<TickStatus> {
+        let key_idx = self.read_register(vx)?;
+        let is_key_pressed = self.read_key(key_idx)?;
+
+        if !is_key_pressed {
+            self.pc += 2;
+        }
+
+        Ok(TickStatus::default())
+    }
+
+    fn exec_wait_for_key(&mut self, vx: u8) -> Result<TickStatus> {
+        let _ = self.read_register(vx)?; // ensure vx is valid
+        self.is_waiting_for_key = (true, vx as usize);
+
+        Ok(TickStatus {
+            is_waiting_for_key: true,
+        })
     }
 }
 
@@ -354,6 +437,7 @@ mod tests {
         assert_eq!(cpu.i_register, 0);
         assert_eq!(cpu.sp, 0);
         assert_eq!(cpu.stack, [0; 16]);
+        assert_eq!(cpu.keypad, [false; 16]);
     }
 
     #[test]
@@ -382,6 +466,30 @@ mod tests {
     }
 
     #[test]
+    fn test_set_key_status() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = CPU::new(&mut rng);
+
+        let res_down = cpu.set_key_status(0xF, true);
+
+        assert!(res_down.is_ok());
+        assert_eq!(cpu.keypad[0xF], true);
+
+        let res_up = cpu.set_key_status(0xF, false);
+        assert!(res_up.is_ok());
+        assert_eq!(cpu.keypad[0xF], false);
+    }
+
+    #[test]
+    fn test_set_key_status_returns_err() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = CPU::new(&mut rng);
+
+        let res = cpu.set_key_status(0x10, true);
+        assert_eq!(res.unwrap_err(), CPUError::InvalidKey(0x10));
+    }
+
+    #[test]
     fn test_tick_returns_err_on_invalid_opcode() {
         let mut rng = any_mocked_rng();
         let mut cpu = any_cpu_with_rom(&[0xFF, 0xFF], &mut rng);
@@ -399,6 +507,22 @@ mod tests {
         let res = cpu.tick();
 
         assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
+    }
+
+    #[test]
+    fn test_tick_does_not_advance_if_waiting_for_key() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[], &mut rng);
+        cpu.is_waiting_for_key = (true, 0xF);
+
+        let res = cpu.tick();
+
+        assert_eq!(
+            res.unwrap(),
+            TickStatus {
+                is_waiting_for_key: true
+            }
+        )
     }
 
     #[test]
@@ -907,10 +1031,96 @@ mod tests {
         let res = cpu.tick();
 
         assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
         assert_eq!(
             cpu.v_buffer[0..8],
             [true, true, true, true, false, false, false, false]
         );
         assert_eq!(cpu.v_registers[0xF], 1);
+    }
+
+    #[test]
+    fn test_skip_if_key_skips_when_key_is_pressed() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0x9E], &mut rng);
+        cpu.v_registers[0x0] = 0x07;
+        cpu.keypad[0x07] = true;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_skip_if_key_does_not_skip_when_key_is_not_pressed() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0x9E], &mut rng);
+        cpu.v_registers[0x0] = 0x07;
+        cpu.keypad[0x07] = false;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_skip_if_key_returns_error_when_invalid_key() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0x9E], &mut rng);
+        cpu.v_registers[0x0] = 0x10;
+
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap_err(), CPUError::InvalidKey(0x10));
+    }
+
+    #[test]
+    fn test_skip_if_not_key_skips_when_key_is_not_pressed() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0xA1], &mut rng);
+        cpu.v_registers[0x0] = 0x07;
+        cpu.keypad[0x07] = false;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_skip_if_not_key_does_not_skip_when_key_is_pressed() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xE0, 0xA1], &mut rng);
+        cpu.v_registers[0x0] = 0x07;
+        cpu.keypad[0x07] = true;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_wait_for_key() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF1, 0x0A], &mut rng);
+
+        let res = cpu.tick();
+        assert_eq!(
+            res.unwrap(),
+            TickStatus {
+                is_waiting_for_key: true
+            }
+        );
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.is_waiting_for_key, (true, 0x01));
+
+        // unblocked execution with a key pressed
+        cpu.set_key_status(0xF, true).unwrap();
+
+        assert_eq!(cpu.is_waiting_for_key, (false, 0x00));
+        assert_eq!(cpu.v_registers[0x01], 0x0F);
     }
 }
