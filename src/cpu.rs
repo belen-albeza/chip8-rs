@@ -324,12 +324,14 @@ impl<'a> CPU<'a> {
         Ok(TickStatus::default())
     }
 
-    fn exec_add_vx(&mut self, x: u8, value: u8) -> Result<TickStatus> {
+    fn exec_add_vx(&mut self, vx: u8, value: u8) -> Result<TickStatus> {
         let i = self
             .v_registers
-            .get_mut(x as usize)
-            .ok_or(CPUError::InvalidVRegister(x))?;
-        *i += value;
+            .get_mut(vx as usize)
+            .ok_or(CPUError::InvalidVRegister(vx))?;
+
+        let (added, _) = i.overflowing_add(value);
+        *i = added;
 
         Ok(TickStatus::default())
     }
@@ -512,11 +514,6 @@ impl<'a> CPU<'a> {
         self.set_memory(self.i_register, hundreds)?;
         self.set_memory(self.i_register + 1, tens)?;
         self.set_memory(self.i_register + 2, ones)?;
-        println!(
-            "BCD: {}{}{} -> {:#03X}",
-            hundreds, tens, ones, self.i_register
-        );
-
         Ok(TickStatus::default())
     }
 
