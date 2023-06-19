@@ -25,6 +25,7 @@ You can quit by closing the window or with the `Esc` key.
 - `poker.ch8`: displays the four poker suits. This ROM uses the same instruction set as the famous `IBM Logo.ch8` and it's [a good starter ROM](https://tobiasvl.github.io/blog/write-a-chip-8-emulator/#instructions) if you are implementing your own CHIP-8 emulator.
 - `wait_for_key.ch8`: displays a sprite and waits for a key press. Then displays a different sprite.
 - `buzzer.ch8`: plays the audio buzzer for 1 second (assuming sound timer ticking at 60Hz).
+- `fabada.ch8`: displays the hex digits `"fabada"` on the screen.
 
 ## Implemented opcodes
 
@@ -61,7 +62,7 @@ Standard CHIP-8 instructions:
 - [x] Fx15 - LD DT, Vx
 - [x] Fx18 - LD ST, Vx
 - [x] Fx1E - ADD I, Vx
-- [ ] Fx29 - LD F, Vx
+- [x] Fx29 - LD F, Vx
 - [x] Fx33 - LD B, Vx
 - [x] Fx55 - LD [I], Vx
 - [x] Fx65 - LD Vx, [I]
