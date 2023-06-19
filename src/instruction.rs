@@ -62,6 +62,8 @@ pub enum Instruction {
     SetDelay(u8),
     // Fx18 -> SoundTimer = Vx
     SetSound(u8),
+    //  Fx1E -> I += Vx
+    AddToIndex(u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -109,6 +111,7 @@ impl TryFrom<u16> for Instruction {
             (0xF, x, 0x0, 0xA) => Ok(Self::WaitForKey(x)),
             (0xF, x, 0x1, 0x5) => Ok(Self::SetDelay(x)),
             (0xF, x, 0x1, 0x8) => Ok(Self::SetSound(x)),
+            (0xF, x, 0x1, 0xE) => Ok(Self::AddToIndex(x)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -224,6 +227,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xF018),
             Ok(Instruction::SetSound(0x00))
+        );
+        assert_eq!(
+            Instruction::try_from(0xF01E),
+            Ok(Instruction::AddToIndex(0x00))
         );
     }
 }

@@ -8,6 +8,7 @@ use crate::sprites;
 pub type Result<T> = std::result::Result<T, CPUError>;
 
 const MEM_SIZE: usize = 4096;
+const MEM_END: usize = 0xFFF;
 const MEM_START: usize = 0x200;
 const V_REGISTERS_SIZE: usize = 16;
 const SCREEN_WIDTH: usize = 64;
@@ -153,6 +154,7 @@ impl<'a> CPU<'a> {
             Instruction::WaitForKey(vx) => self.exec_wait_for_key(vx),
             Instruction::SetDelay(vx) => self.exec_set_delay(vx),
             Instruction::SetSound(vx) => self.exec_set_sound(vx),
+            Instruction::AddToIndex(vx) => self.exec_add_to_index(vx),
         }?;
 
         status.is_buzzing = self.sound_timer > 0;
@@ -186,6 +188,19 @@ impl<'a> CPU<'a> {
             .ok_or(CPUError::InvalidVRegister(x))?;
         *i = value;
         Ok(())
+    }
+
+    fn set_i_register(&mut self, value: u16) -> u8 {
+        let mut carry = 0u8;
+        let mut x = value;
+
+        if x as usize > MEM_END {
+            x = x & (MEM_END as u16);
+            carry = 0x01;
+        }
+
+        self.i_register = x;
+        carry
     }
 
     fn read_key(&self, i: u8) -> Result<bool> {
@@ -428,6 +443,14 @@ impl<'a> CPU<'a> {
 
     fn exec_set_sound(&mut self, vx: u8) -> Result<TickStatus> {
         self.sound_timer = self.read_register(vx)?;
+        Ok(TickStatus::default())
+    }
+
+    fn exec_add_to_index(&mut self, vx: u8) -> Result<TickStatus> {
+        let value = self.i_register + self.read_register(vx)? as u16;
+        let carry = self.set_i_register(value);
+        self.set_register(0xF, carry)?;
+
         Ok(TickStatus::default())
     }
 }
@@ -1259,5 +1282,35 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x202);
         assert_eq!(cpu.sound_timer, 0xFA);
+    }
+
+    #[test]
+    fn test_add_to_index() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x1E], &mut rng);
+        cpu.i_register = 0xFA;
+        cpu.v_registers[0] = 0x02;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.i_register, 0xFC);
+    }
+
+    #[test]
+    fn test_add_to_index_overflows() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x1E], &mut rng);
+        cpu.i_register = 0xFFE;
+        cpu.v_registers[0x0] = 0x02;
+        cpu.v_registers[0xF] = 0x0;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.i_register, 0x00);
+        assert_eq!(cpu.v_registers[0xF], 0x01);
     }
 }
