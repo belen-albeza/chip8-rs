@@ -79,6 +79,7 @@ pub enum CPUError {
     InvalidAddress(u16),
     InvalidVRegister(u8),
     InvalidKey(usize),
+    InvalidDigit(u8),
 }
 
 impl fmt::Display for CPUError {
@@ -90,6 +91,7 @@ impl fmt::Display for CPUError {
             Self::InvalidOpcode(op) => write!(f, "Invalid opcode: {:#04X}", op),
             Self::InvalidAddress(addr) => write!(f, "Invalid memory address: {:#04X}", addr),
             Self::InvalidVRegister(i) => write!(f, "Invalid V-Register: {:#01X}", i),
+            Self::InvalidDigit(x) => write!(f, "Invalid digit: {}", x),
         }
     }
 }

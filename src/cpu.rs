@@ -9,6 +9,7 @@ pub type Result<T> = std::result::Result<T, CPUError>;
 const MEM_SIZE: usize = 4096;
 const MEM_END: usize = 0xFFF;
 const MEM_START: usize = 0x200;
+const BASE_DIGIT_ADDRESS: usize = 0x0;
 const V_REGISTERS_SIZE: usize = 16;
 const SCREEN_WIDTH: usize = 64;
 const SCREEN_HEIGHT: usize = 32;
@@ -48,7 +49,7 @@ pub struct CPU<'a> {
 
 impl<'a> CPU<'a> {
     pub fn new(rng: &'a mut impl RngCore) -> Self {
-        Self {
+        let mut cpu = Self {
             memory: [0; MEM_SIZE],
             pc: 0x200,
             sp: 0,
@@ -61,7 +62,10 @@ impl<'a> CPU<'a> {
             delay_timer: 0,
             sound_timer: 0,
             is_waiting_for_key: (false, 0x0),
-        }
+        };
+
+        cpu.load_private_data();
+        cpu
     }
 
     pub fn load_rom(&mut self, rom: &[u8]) -> Result<()> {
@@ -85,6 +89,8 @@ impl<'a> CPU<'a> {
         self.delay_timer = 0;
         self.sound_timer = 0;
         self.is_waiting_for_key = (false, 0x0);
+
+        self.load_private_data();
     }
 
     pub fn set_key_status(&mut self, i: usize, status: bool) -> Result<()> {
@@ -154,6 +160,7 @@ impl<'a> CPU<'a> {
             Instruction::SetDelay(vx) => self.exec_set_delay(vx),
             Instruction::SetSound(vx) => self.exec_set_sound(vx),
             Instruction::AddToIndex(vx) => self.exec_add_to_index(vx),
+            Instruction::LoadDigit(vx) => self.exec_load_digit(vx),
             Instruction::LoadBCD(vx) => self.exec_load_bcd(vx),
             Instruction::LoadMem(vx) => self.exec_load_mem(vx),
             Instruction::SaveMem(vx) => self.exec_save_mem(vx),
@@ -165,6 +172,14 @@ impl<'a> CPU<'a> {
 
     pub fn visual_buffer(&self) -> &[bool; SCREEN_WIDTH * SCREEN_HEIGHT] {
         &self.v_buffer
+    }
+
+    fn load_private_data(&mut self) {
+        for x in 0..=0xF {
+            let digit = sprites::digit_sprite_data(x).unwrap();
+            let addr = BASE_DIGIT_ADDRESS + (x as usize * sprites::DIGIT_SIZE);
+            self.memory[addr..addr + sprites::DIGIT_SIZE].copy_from_slice(&digit);
+        }
     }
 
     fn read_byte(&mut self) -> Result<u8> {
@@ -251,6 +266,16 @@ impl<'a> CPU<'a> {
         Ok(value)
     }
 
+    fn address_for_digit(&self, x: u8) -> Result<u16> {
+        if x > 0xF {
+            return Err(CPUError::InvalidDigit(x));
+        }
+
+        let addr = BASE_DIGIT_ADDRESS + x as usize * sprites::DIGIT_SIZE;
+
+        Ok(addr as u16)
+    }
+
     fn exec_clear_screen(&mut self) -> Result<TickStatus> {
         self.v_buffer.fill(false);
         Ok(TickStatus::default())
@@ -299,12 +324,14 @@ impl<'a> CPU<'a> {
         Ok(TickStatus::default())
     }
 
-    fn exec_add_vx(&mut self, x: u8, value: u8) -> Result<TickStatus> {
+    fn exec_add_vx(&mut self, vx: u8, value: u8) -> Result<TickStatus> {
         let i = self
             .v_registers
-            .get_mut(x as usize)
-            .ok_or(CPUError::InvalidVRegister(x))?;
-        *i += value;
+            .get_mut(vx as usize)
+            .ok_or(CPUError::InvalidVRegister(vx))?;
+
+        let (added, _) = i.overflowing_add(value);
+        *i = added;
 
         Ok(TickStatus::default())
     }
@@ -475,16 +502,18 @@ impl<'a> CPU<'a> {
         Ok(TickStatus::default())
     }
 
+    fn exec_load_digit(&mut self, vx: u8) -> Result<TickStatus> {
+        let digit = self.read_register(vx)?;
+        self.i_register = self.address_for_digit(digit)?;
+
+        Ok(TickStatus::default())
+    }
+
     fn exec_load_bcd(&mut self, vx: u8) -> Result<TickStatus> {
         let (hundreds, tens, ones) = self.read_register(vx)?.to_bcd();
         self.set_memory(self.i_register, hundreds)?;
         self.set_memory(self.i_register + 1, tens)?;
         self.set_memory(self.i_register + 2, ones)?;
-        println!(
-            "BCD: {}{}{} -> {:#03X}",
-            hundreds, tens, ones, self.i_register
-        );
-
         Ok(TickStatus::default())
     }
 
@@ -543,7 +572,7 @@ mod tests {
     fn test_new() {
         let mut rng = any_mocked_rng();
         let cpu = CPU::new(&mut rng);
-        assert_eq!(cpu.memory, [0; 4096]);
+        assert_eq!(cpu.memory[MEM_START..MEM_END], [0; MEM_END - MEM_START]);
         assert_eq!(cpu.pc, 0x200);
         assert_eq!(cpu.v_registers, [0; 16]);
         assert_eq!(cpu.i_register, 0);
@@ -1362,6 +1391,34 @@ mod tests {
     }
 
     #[test]
+    fn test_load_digit() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x29], &mut rng);
+        cpu.v_registers[0x0] = 0xA;
+        cpu.i_register = 0;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(
+            cpu.memory[(cpu.i_register as usize)..(cpu.i_register + 5) as usize],
+            [0xF0, 0x90, 0xF0, 0x90, 0x90]
+        );
+    }
+
+    #[test]
+    fn test_load_digit_returns_invalid_digit_error() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x29], &mut rng);
+        cpu.v_registers[0x0] = 0x10;
+
+        let res = cpu.tick();
+
+        assert_eq!(res.unwrap_err(), CPUError::InvalidDigit(0x10));
+    }
+
+    #[test]
     fn test_load_bcd() {
         let mut rng = any_mocked_rng();
         let mut cpu = any_cpu_with_rom(&[0xF0, 0x33], &mut rng);
@@ -1390,7 +1447,7 @@ mod tests {
     #[test]
     fn test_load_mem() {
         let mut rng = any_mocked_rng();
-        let mut cpu = any_cpu_with_rom(&[0xF2, 0x55], &mut rng);
+        let mut cpu = any_cpu_with_rom(&[0xF2, 0x65], &mut rng);
         cpu.i_register = 0x500;
         cpu.memory[0x500..=0x503].copy_from_slice(&[0x02, 0x04, 0x06, 0xFF]);
 
@@ -1407,7 +1464,7 @@ mod tests {
     #[test]
     fn test_load_mem_returns_invalid_address_error() {
         let mut rng = any_mocked_rng();
-        let mut cpu = any_cpu_with_rom(&[0xF1, 0x55], &mut rng);
+        let mut cpu = any_cpu_with_rom(&[0xF1, 0x65], &mut rng);
         cpu.i_register = 0xFFF;
 
         let res = cpu.tick();
@@ -1417,7 +1474,7 @@ mod tests {
     #[test]
     fn test_save_mem() {
         let mut rng = any_mocked_rng();
-        let mut cpu = any_cpu_with_rom(&[0xF2, 0x65], &mut rng);
+        let mut cpu = any_cpu_with_rom(&[0xF2, 0x55], &mut rng);
         cpu.i_register = 0x500;
         cpu.v_registers[0x0] = 0x02;
         cpu.v_registers[0x1] = 0x04;
