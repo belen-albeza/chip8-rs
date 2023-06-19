@@ -1,5 +1,4 @@
 use rand::{Rng, RngCore};
-use std::fmt;
 
 use crate::error::CPUError;
 use crate::instruction::Instruction;
@@ -8,6 +7,7 @@ use crate::sprites;
 pub type Result<T> = std::result::Result<T, CPUError>;
 
 const MEM_SIZE: usize = 4096;
+const MEM_END: usize = 0xFFF;
 const MEM_START: usize = 0x200;
 const V_REGISTERS_SIZE: usize = 16;
 const SCREEN_WIDTH: usize = 64;
@@ -153,6 +153,10 @@ impl<'a> CPU<'a> {
             Instruction::WaitForKey(vx) => self.exec_wait_for_key(vx),
             Instruction::SetDelay(vx) => self.exec_set_delay(vx),
             Instruction::SetSound(vx) => self.exec_set_sound(vx),
+            Instruction::AddToIndex(vx) => self.exec_add_to_index(vx),
+            Instruction::LoadBCD(vx) => self.exec_load_bcd(vx),
+            Instruction::LoadMem(vx) => self.exec_load_mem(vx),
+            Instruction::SaveMem(vx) => self.exec_save_mem(vx),
         }?;
 
         status.is_buzzing = self.sound_timer > 0;
@@ -186,6 +190,38 @@ impl<'a> CPU<'a> {
             .ok_or(CPUError::InvalidVRegister(x))?;
         *i = value;
         Ok(())
+    }
+
+    fn set_memory(&mut self, addr: u16, value: u8) -> Result<()> {
+        let mem_range = MEM_START..=MEM_END;
+        if !mem_range.contains(&(addr as usize)) {
+            return Err(CPUError::InvalidAddress(addr));
+        }
+
+        self.memory[addr as usize] = value;
+        Ok(())
+    }
+
+    fn get_memory(&mut self, addr: u16) -> Result<u8> {
+        let mem_range = MEM_START..=MEM_END;
+        if !mem_range.contains(&(addr as usize)) {
+            return Err(CPUError::InvalidAddress(addr));
+        }
+
+        Ok(self.memory[addr as usize])
+    }
+
+    fn set_i_register(&mut self, value: u16) -> u8 {
+        let mut carry = 0u8;
+        let mut x = value;
+
+        if x as usize > MEM_END {
+            x = x & (MEM_END as u16);
+            carry = 0x01;
+        }
+
+        self.i_register = x;
+        carry
     }
 
     fn read_key(&self, i: u8) -> Result<bool> {
@@ -430,24 +466,58 @@ impl<'a> CPU<'a> {
         self.sound_timer = self.read_register(vx)?;
         Ok(TickStatus::default())
     }
-}
 
-impl fmt::Display for CPU<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut output = "".to_string();
-        for y in 0..SCREEN_HEIGHT {
-            for x in 0..SCREEN_WIDTH {
-                let pixel = if self.v_buffer[y * SCREEN_WIDTH + x] {
-                    "*"
-                } else {
-                    " "
-                };
-                output += pixel;
-            }
-            output += "\n";
+    fn exec_add_to_index(&mut self, vx: u8) -> Result<TickStatus> {
+        let value = self.i_register + self.read_register(vx)? as u16;
+        let carry = self.set_i_register(value);
+        self.set_register(0xF, carry)?;
+
+        Ok(TickStatus::default())
+    }
+
+    fn exec_load_bcd(&mut self, vx: u8) -> Result<TickStatus> {
+        let (hundreds, tens, ones) = self.read_register(vx)?.to_bcd();
+        self.set_memory(self.i_register, hundreds)?;
+        self.set_memory(self.i_register + 1, tens)?;
+        self.set_memory(self.i_register + 2, ones)?;
+        println!(
+            "BCD: {}{}{} -> {:#03X}",
+            hundreds, tens, ones, self.i_register
+        );
+
+        Ok(TickStatus::default())
+    }
+
+    fn exec_load_mem(&mut self, vx: u8) -> Result<TickStatus> {
+        for i in 0..=vx {
+            let value = self.get_memory(self.i_register + i as u16)?;
+            self.set_register(i, value)?;
         }
 
-        write!(f, "{}", output)
+        Ok(TickStatus::default())
+    }
+
+    fn exec_save_mem(&mut self, vx: u8) -> Result<TickStatus> {
+        for i in 0..=vx {
+            let value = self.read_register(i)?;
+            self.set_memory(self.i_register + i as u16, value)?;
+        }
+
+        Ok(TickStatus::default())
+    }
+}
+
+trait BCD {
+    fn to_bcd(&self) -> (u8, u8, u8);
+}
+
+impl BCD for u8 {
+    fn to_bcd(&self) -> (u8, u8, u8) {
+        let hundreds = self / 100;
+        let tens = (self / 10) % 10;
+        let ones = self % 10;
+
+        (hundreds, tens, ones)
     }
 }
 
@@ -1259,5 +1329,116 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(cpu.pc, 0x202);
         assert_eq!(cpu.sound_timer, 0xFA);
+    }
+
+    #[test]
+    fn test_add_to_index() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x1E], &mut rng);
+        cpu.i_register = 0xFA;
+        cpu.v_registers[0] = 0x02;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.i_register, 0xFC);
+    }
+
+    #[test]
+    fn test_add_to_index_overflows() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x1E], &mut rng);
+        cpu.i_register = 0xFFE;
+        cpu.v_registers[0x0] = 0x02;
+        cpu.v_registers[0xF] = 0x0;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.i_register, 0x00);
+        assert_eq!(cpu.v_registers[0xF], 0x01);
+    }
+
+    #[test]
+    fn test_load_bcd() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x33], &mut rng);
+        cpu.v_registers[0x0] = 251;
+        cpu.i_register = 0x500;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.memory[0x500], 0x02);
+        assert_eq!(cpu.memory[0x501], 0x05);
+        assert_eq!(cpu.memory[0x502], 0x01);
+    }
+
+    #[test]
+    fn test_load_bcd_returns_invalid_address_error() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x33], &mut rng);
+        cpu.i_register = 0xFFF;
+
+        let res = cpu.tick();
+        assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
+    }
+
+    #[test]
+    fn test_load_mem() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF2, 0x55], &mut rng);
+        cpu.i_register = 0x500;
+        cpu.memory[0x500..=0x503].copy_from_slice(&[0x02, 0x04, 0x06, 0xFF]);
+
+        let res = cpu.tick();
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.i_register, 0x500);
+        assert_eq!(cpu.v_registers[0x0], 0x02);
+        assert_eq!(cpu.v_registers[0x1], 0x04);
+        assert_eq!(cpu.v_registers[0x2], 0x06);
+        assert_eq!(cpu.v_registers[0x3], 0x00);
+    }
+
+    #[test]
+    fn test_load_mem_returns_invalid_address_error() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF1, 0x55], &mut rng);
+        cpu.i_register = 0xFFF;
+
+        let res = cpu.tick();
+        assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
+    }
+
+    #[test]
+    fn test_save_mem() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF2, 0x65], &mut rng);
+        cpu.i_register = 0x500;
+        cpu.v_registers[0x0] = 0x02;
+        cpu.v_registers[0x1] = 0x04;
+        cpu.v_registers[0x2] = 0x06;
+
+        // cpu.memory[0x500..=0x503].copy_from_slice(&[0x02, 0x04, 0x06, 0xFF]);
+
+        let res = cpu.tick();
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.i_register, 0x500);
+        assert_eq!(cpu.memory[0x500..=0x502], [0x02u8, 0x04u8, 0x06u8]);
+    }
+
+    #[test]
+    fn test_save_mem_returns_invalid_address_error() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF1, 0x55], &mut rng);
+        cpu.i_register = 0xFFF;
+
+        let res = cpu.tick();
+        assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
     }
 }

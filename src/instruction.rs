@@ -62,6 +62,14 @@ pub enum Instruction {
     SetDelay(u8),
     // Fx18 -> SoundTimer = Vx
     SetSound(u8),
+    //  Fx1E -> I += Vx
+    AddToIndex(u8),
+    // Fx33 -> Stores BCD representation of Vx in I, I+1, I+2
+    LoadBCD(u8),
+    // Fx55 -> [V0..Vx] = [I+0..I+x]
+    LoadMem(u8),
+    // Fx56 -> [I+0..I+x] = [V0..Vx]
+    SaveMem(u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -109,6 +117,10 @@ impl TryFrom<u16> for Instruction {
             (0xF, x, 0x0, 0xA) => Ok(Self::WaitForKey(x)),
             (0xF, x, 0x1, 0x5) => Ok(Self::SetDelay(x)),
             (0xF, x, 0x1, 0x8) => Ok(Self::SetSound(x)),
+            (0xF, x, 0x1, 0xE) => Ok(Self::AddToIndex(x)),
+            (0xF, x, 0x3, 0x3) => Ok(Self::LoadBCD(x)),
+            (0xF, x, 0x5, 0x5) => Ok(Self::LoadMem(x)),
+            (0xF, x, 0x6, 0x5) => Ok(Self::SaveMem(x)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -224,6 +236,22 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xF018),
             Ok(Instruction::SetSound(0x00))
+        );
+        assert_eq!(
+            Instruction::try_from(0xF01E),
+            Ok(Instruction::AddToIndex(0x00))
+        );
+        assert_eq!(
+            Instruction::try_from(0xFA33),
+            Ok(Instruction::LoadBCD(0x0A))
+        );
+        assert_eq!(
+            Instruction::try_from(0xFA55),
+            Ok(Instruction::LoadMem(0x0A))
+        );
+        assert_eq!(
+            Instruction::try_from(0xFA65),
+            Ok(Instruction::SaveMem(0x0A))
         );
     }
 }
