@@ -64,7 +64,7 @@ Standard CHIP-8 instructions:
 - [ ] Fx29 - LD F, Vx
 - [x] Fx33 - LD B, Vx
 - [x] Fx55 - LD [I], Vx
-- [ ] Fx65 - LD Vx, [I]
+- [x] Fx65 - LD Vx, [I]
 
 > ⚠️ Note: for ambiguous opcodes (`8xy6`, `8xyE`, `Bnnn`), the Super-CHIP behaviour has been implemented.
 

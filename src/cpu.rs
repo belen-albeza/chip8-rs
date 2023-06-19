@@ -156,6 +156,7 @@ impl<'a> CPU<'a> {
             Instruction::AddToIndex(vx) => self.exec_add_to_index(vx),
             Instruction::LoadBCD(vx) => self.exec_load_bcd(vx),
             Instruction::LoadMem(vx) => self.exec_load_mem(vx),
+            Instruction::SaveMem(vx) => self.exec_save_mem(vx),
         }?;
 
         status.is_buzzing = self.sound_timer > 0;
@@ -491,6 +492,15 @@ impl<'a> CPU<'a> {
         for i in 0..=vx {
             let value = self.get_memory(self.i_register + i as u16)?;
             self.set_register(i, value)?;
+        }
+
+        Ok(TickStatus::default())
+    }
+
+    fn exec_save_mem(&mut self, vx: u8) -> Result<TickStatus> {
+        for i in 0..=vx {
+            let value = self.read_register(i)?;
+            self.set_memory(self.i_register + i as u16, value)?;
         }
 
         Ok(TickStatus::default())
@@ -1396,6 +1406,34 @@ mod tests {
 
     #[test]
     fn test_load_mem_returns_invalid_address_error() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF1, 0x55], &mut rng);
+        cpu.i_register = 0xFFF;
+
+        let res = cpu.tick();
+        assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
+    }
+
+    #[test]
+    fn test_save_mem() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF2, 0x65], &mut rng);
+        cpu.i_register = 0x500;
+        cpu.v_registers[0x0] = 0x02;
+        cpu.v_registers[0x1] = 0x04;
+        cpu.v_registers[0x2] = 0x06;
+
+        // cpu.memory[0x500..=0x503].copy_from_slice(&[0x02, 0x04, 0x06, 0xFF]);
+
+        let res = cpu.tick();
+        assert!(res.is_ok());
+        assert_eq!(cpu.pc, 0x202);
+        assert_eq!(cpu.i_register, 0x500);
+        assert_eq!(cpu.memory[0x500..=0x502], [0x02u8, 0x04u8, 0x06u8]);
+    }
+
+    #[test]
+    fn test_save_mem_returns_invalid_address_error() {
         let mut rng = any_mocked_rng();
         let mut cpu = any_cpu_with_rom(&[0xF1, 0x55], &mut rng);
         cpu.i_register = 0xFFF;
