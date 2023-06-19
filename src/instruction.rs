@@ -68,10 +68,10 @@ pub enum Instruction {
     LoadDigit(u8),
     // Fx33 -> Stores BCD representation of Vx in I, I+1, I+2
     LoadBCD(u8),
-    // Fx55 -> [V0..Vx] = [I+0..I+x]
-    LoadMem(u8),
-    // Fx56 -> [I+0..I+x] = [V0..Vx]
+    // Fx55 -> [I+0..I+x] = [V0..Vx]
     SaveMem(u8),
+    // Fx65 -> [V0..Vx] = [I+0..I+x]
+    LoadMem(u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -122,8 +122,8 @@ impl TryFrom<u16> for Instruction {
             (0xF, x, 0x1, 0xE) => Ok(Self::AddToIndex(x)),
             (0xF, x, 0x2, 0x9) => Ok(Self::LoadDigit(x)),
             (0xF, x, 0x3, 0x3) => Ok(Self::LoadBCD(x)),
-            (0xF, x, 0x5, 0x5) => Ok(Self::LoadMem(x)),
-            (0xF, x, 0x6, 0x5) => Ok(Self::SaveMem(x)),
+            (0xF, x, 0x5, 0x5) => Ok(Self::SaveMem(x)),
+            (0xF, x, 0x6, 0x5) => Ok(Self::LoadMem(x)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -254,11 +254,11 @@ mod tests {
         );
         assert_eq!(
             Instruction::try_from(0xFA55),
-            Ok(Instruction::LoadMem(0x0A))
+            Ok(Instruction::SaveMem(0x0A))
         );
         assert_eq!(
             Instruction::try_from(0xFA65),
-            Ok(Instruction::SaveMem(0x0A))
+            Ok(Instruction::LoadMem(0x0A))
         );
     }
 }
