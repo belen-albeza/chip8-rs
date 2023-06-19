@@ -7,6 +7,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Scancode};
 use sdl2::EventPump;
 
+use crate::audio::Audio;
 use crate::cpu::CPU;
 use crate::error::Error;
 use crate::screen;
@@ -44,6 +45,8 @@ impl<'a> VM<'a> {
         let mut screen = screen::Screen::try_from(&texture_creator)?;
         let mut event_pump = sdl_context.event_pump().map_err(to_sdl_err)?;
 
+        let mut buzzer = Audio::new(&sdl_context, 1.0)?;
+
         let mut frames = -1;
 
         loop {
@@ -55,7 +58,8 @@ impl<'a> VM<'a> {
             frames += 1;
 
             if frames % FRAMES_PER_CYCLE == 0 {
-                let _ = self.cpu.tick()?;
+                let status = self.cpu.tick()?;
+                buzzer.set_status(status.is_buzzing);
                 frames = 0;
             }
 
