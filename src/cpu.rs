@@ -155,6 +155,7 @@ impl<'a> CPU<'a> {
             Instruction::SetDelay(vx) => self.exec_set_delay(vx),
             Instruction::SetSound(vx) => self.exec_set_sound(vx),
             Instruction::AddToIndex(vx) => self.exec_add_to_index(vx),
+            Instruction::LoadBCD(vx) => self.exec_load_bcd(vx),
         }?;
 
         status.is_buzzing = self.sound_timer > 0;
@@ -187,6 +188,16 @@ impl<'a> CPU<'a> {
             .get_mut(x as usize)
             .ok_or(CPUError::InvalidVRegister(x))?;
         *i = value;
+        Ok(())
+    }
+
+    fn set_memory(&mut self, addr: u16, value: u8) -> Result<()> {
+        let mem_range = MEM_START..=MEM_END;
+        if !mem_range.contains(&(addr as usize)) {
+            return Err(CPUError::InvalidAddress(addr));
+        }
+
+        self.memory[addr as usize] = value;
         Ok(())
     }
 
@@ -453,24 +464,32 @@ impl<'a> CPU<'a> {
 
         Ok(TickStatus::default())
     }
+
+    fn exec_load_bcd(&mut self, vx: u8) -> Result<TickStatus> {
+        let (hundreds, tens, ones) = self.read_register(vx)?.to_bcd();
+        self.set_memory(self.i_register, hundreds)?;
+        self.set_memory(self.i_register + 1, tens)?;
+        self.set_memory(self.i_register + 2, ones)?;
+        println!(
+            "BCD: {}{}{} -> {:#03X}",
+            hundreds, tens, ones, self.i_register
+        );
+
+        Ok(TickStatus::default())
+    }
 }
 
-impl fmt::Display for CPU<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut output = "".to_string();
-        for y in 0..SCREEN_HEIGHT {
-            for x in 0..SCREEN_WIDTH {
-                let pixel = if self.v_buffer[y * SCREEN_WIDTH + x] {
-                    "*"
-                } else {
-                    " "
-                };
-                output += pixel;
-            }
-            output += "\n";
-        }
+trait BCD {
+    fn to_bcd(&self) -> (u8, u8, u8);
+}
 
-        write!(f, "{}", output)
+impl BCD for u8 {
+    fn to_bcd(&self) -> (u8, u8, u8) {
+        let hundreds = self / 100;
+        let tens = (self / 10) % 10;
+        let ones = self % 10;
+
+        (hundreds, tens, ones)
     }
 }
 
@@ -1312,5 +1331,30 @@ mod tests {
         assert_eq!(cpu.pc, 0x202);
         assert_eq!(cpu.i_register, 0x00);
         assert_eq!(cpu.v_registers[0xF], 0x01);
+    }
+
+    #[test]
+    fn test_load_bcd() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x33], &mut rng);
+        cpu.v_registers[0x0] = 251;
+        cpu.i_register = 0x500;
+
+        let res = cpu.tick();
+
+        assert!(res.is_ok());
+        assert_eq!(cpu.memory[0x500], 0x02);
+        assert_eq!(cpu.memory[0x501], 0x05);
+        assert_eq!(cpu.memory[0x502], 0x01);
+    }
+
+    #[test]
+    fn test_load_bcd_returns_error() {
+        let mut rng = any_mocked_rng();
+        let mut cpu = any_cpu_with_rom(&[0xF0, 0x33], &mut rng);
+        cpu.i_register = 0xFFF;
+
+        let res = cpu.tick();
+        assert_eq!(res.unwrap_err(), CPUError::InvalidAddress(0x1000));
     }
 }

@@ -64,6 +64,8 @@ pub enum Instruction {
     SetSound(u8),
     //  Fx1E -> I += Vx
     AddToIndex(u8),
+    // Fx33 -> Stores BCD representation of Vx in I, I+1, I+2
+    LoadBCD(u8),
 }
 
 impl TryFrom<u16> for Instruction {
@@ -112,6 +114,7 @@ impl TryFrom<u16> for Instruction {
             (0xF, x, 0x1, 0x5) => Ok(Self::SetDelay(x)),
             (0xF, x, 0x1, 0x8) => Ok(Self::SetSound(x)),
             (0xF, x, 0x1, 0xE) => Ok(Self::AddToIndex(x)),
+            (0xF, x, 0x3, 0x3) => Ok(Self::LoadBCD(x)),
             _ => Err(CPUError::InvalidOpcode(value)),
         }
     }
@@ -231,6 +234,10 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xF01E),
             Ok(Instruction::AddToIndex(0x00))
+        );
+        assert_eq!(
+            Instruction::try_from(0xFA33),
+            Ok(Instruction::LoadBCD(0x0A))
         );
     }
 }
