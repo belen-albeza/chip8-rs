@@ -1447,7 +1447,7 @@ mod tests {
     #[test]
     fn test_load_mem() {
         let mut rng = any_mocked_rng();
-        let mut cpu = any_cpu_with_rom(&[0xF2, 0x55], &mut rng);
+        let mut cpu = any_cpu_with_rom(&[0xF2, 0x65], &mut rng);
         cpu.i_register = 0x500;
         cpu.memory[0x500..=0x503].copy_from_slice(&[0x02, 0x04, 0x06, 0xFF]);
 
@@ -1464,7 +1464,7 @@ mod tests {
     #[test]
     fn test_load_mem_returns_invalid_address_error() {
         let mut rng = any_mocked_rng();
-        let mut cpu = any_cpu_with_rom(&[0xF1, 0x55], &mut rng);
+        let mut cpu = any_cpu_with_rom(&[0xF1, 0x65], &mut rng);
         cpu.i_register = 0xFFF;
 
         let res = cpu.tick();
@@ -1474,7 +1474,7 @@ mod tests {
     #[test]
     fn test_save_mem() {
         let mut rng = any_mocked_rng();
-        let mut cpu = any_cpu_with_rom(&[0xF2, 0x65], &mut rng);
+        let mut cpu = any_cpu_with_rom(&[0xF2, 0x55], &mut rng);
         cpu.i_register = 0x500;
         cpu.v_registers[0x0] = 0x02;
         cpu.v_registers[0x1] = 0x04;

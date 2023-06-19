@@ -62,7 +62,11 @@ Standard CHIP-8 instructions:
 - [x] Fx15 - LD DT, Vx
 - [x] Fx18 - LD ST, Vx
 - [x] Fx1E - ADD I, Vx
+<<<<<<< HEAD
 - [x] Fx29 - LD F, Vx
+=======
+- [ ] Fx29 - LD F, Vx
+>>>>>>> main
 - [x] Fx33 - LD B, Vx
 - [x] Fx55 - LD [I], Vx
 - [x] Fx65 - LD Vx, [I]
