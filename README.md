@@ -1,3 +1,5 @@
+⚠️ This is **deprecated** in favor of [chip8-wasm](https://github.com/belen-albeza/chip8-wasm/)
+
 # chip8-rs
 
 CHIP-8 emulator in Rust
